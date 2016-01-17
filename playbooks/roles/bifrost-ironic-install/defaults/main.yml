@@ -27,6 +27,13 @@ ans_network_interface: "{{ network_interface | replace('-', '_') }}"
 # documentation at http://ipxe.org/crypto
 ipa_file_protocol: "http"
 
+enable_uefi_ipxe: true
+
+# Warning: This downloads potentially unverified code directly from ipxe.org
+# and should only be utilized with careful consideration.
+direct_ipxe_download: false
+ipxe_download_url: "https://boot.ipxe.org/"
+
 ipa_kernel: "{{http_boot_folder}}/ipa.vmlinuz"
 ipa_ramdisk: "{{http_boot_folder}}/ipa.initramfs"
 ipa_kernel_url: "{{ ipa_file_protocol }}://{{ hostvars[inventory_hostname]['ansible_' + ans_network_interface]['ipv4']['address'] }}:{{nginx_port}}/ipa.vmlinuz"

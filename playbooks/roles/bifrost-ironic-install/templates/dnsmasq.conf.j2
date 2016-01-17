@@ -86,6 +86,11 @@ dhcp-boot=tag:gpxe,/ipxe.pxe
 
 dhcp-match=set:ipxe,175 # iPXE sends a 175 option.
 dhcp-boot=tag:!ipxe,/undionly.kpxe
+{% if enable_uefi_ipxe %}
+dhcp-match=set:efi,option:client-arch,7
+dhcp-boot=tag:efi,/{{ ipxe_efi_binary }}
+{% endif %}
+
 {% if testing %}
 dhcp-boot=http://192.168.122.1:{{nginx_port}}/boot.ipxe
 {% else %}
