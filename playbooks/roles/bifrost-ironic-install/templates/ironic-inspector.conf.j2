@@ -67,5 +67,5 @@ processing_hooks = {{ inspector_processing_hooks }}
 node_not_found_hook = enroll
 
 [discovery]
-enroll_node_driver = {{ inspector.discovery.enroll_node_driver | default('pxe_ssh') }}
+enroll_node_driver = {{ inspector.discovery.default_node_driver }}
 {% endif %}
