@@ -134,6 +134,9 @@ ironic_auth_strategy: "noauth"
 # Set inspector_log_dir to use a non-default log directory for inspector.
 #inspector_log_dir:
 
+# Set nginx_log_dir to use a non-default log directory for nginx.
+nginx_log_dir: /var/log/nginx
+
 inspector_data_dir: "/opt/stack/ironic-inspector/var"
 inspector_store_ramdisk_logs: true
 # Note: inspector_port_addition has three valid values: all, active, pxe

@@ -161,6 +161,9 @@ ironic_log_dir: String value, default undefined. If set, it specifies a
 inspector_log_dir: String value, default undefined. If set, it specifies a
                    non-default log directory for inspector.
 
+nginx_log_dir: String value, default /var/log/nginx. It specifies a log
+               directory for nginx.
+
 ### Hardware Inspection Support
 
 Bifrost also supports the installation of ironic-inspector in standalone
