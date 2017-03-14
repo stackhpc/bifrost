@@ -309,6 +309,13 @@
     testing | bool == true
 - name: "Deploy nginx configuration file for serving HTTP requests"
   template: src=nginx.conf.j2 dest=/etc/nginx/nginx.conf
+- name: "Ensure inspector object storage directory exists"
+  file:
+    path: "{{ http_boot_folder }}/ironic-inspector"
+    state: directory
+    owner: nginx
+    group: nginx
+  when: inspector_store_data_in_nginx | bool
 - name: "Download Ironic Python Agent kernel & image"
   include: download_ipa_image.yml
   when: create_ipa_image | bool == false and download_ipa | bool == true
