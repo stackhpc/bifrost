@@ -316,9 +316,14 @@ def _identify_shade_auth():
     # potentially be passed in as variables which could then be passed
     # to modules for authentication allowing the basic tooling to be
     # utilized in the context of a larger cloud supporting ironic.
+    # NOTE(mgoddard): Support providing the Ironic API endpoint URL through
+    # both the openstackclient OS_URL and ironic client IRONIC_URL environment
+    # variables.
+    default_endpoint = "http://localhost:6385/"
+    endpoint = os.getenv("OS_URL", os.getenv("IRONIC_URL", default_endpoint))
     options = dict(
         auth_type="None",
-        auth=dict(endpoint="http://localhost:6385/",)
+        auth=dict(endpoint=endpoint),
     )
     return options
 
