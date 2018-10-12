@@ -177,7 +177,7 @@ inspector:
 
 # We may not have packaged iPXE files on some distros, or may want to
 # download them on their own.
-download_ipxe: false
+download_ipxe: true
 
 
 # DEPRECATED: Please see enabled_hardware_types

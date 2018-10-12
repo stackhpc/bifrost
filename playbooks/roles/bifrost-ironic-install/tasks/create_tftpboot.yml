@@ -56,6 +56,10 @@
 - name: "Copy iPXE image into place"
   copy: src={{ ipxe_dir }}/undionly.kpxe dest=/tftpboot/ remote_src=true
 
+- name: "Copy EFI iPXE image into place"
+  copy: src={{ ipxe_dir }}/snponly.efi dest=/tftpboot/ remote_src=true
+  when: enable_uefi_ipxe | bool == true
+
 # NOTE(TheJulia): Copy full iPXE chain loader images in case they are required.
 - name: "Copy full iPXE image into {{ http_boot_folder }}/"
   copy: src={{ ipxe_dir }}/{{ ipxe_full_binary }} dest={{ http_boot_folder }}/ remote_src=true
@@ -63,7 +67,7 @@
 - name: "Copy full iPXE image into /tftpboot"
   copy: src={{ ipxe_dir }}/{{ ipxe_full_binary }} dest=/tftpboot/ remote_src=true
 
-- name: "Check if the EFI iPXE binary is present"
+- name: "Check if the EFI full iPXE image is present"
   stat:
     path: "{{ ipxe_dir }}/{{ ipxe_efi_binary }}"
     get_md5: false

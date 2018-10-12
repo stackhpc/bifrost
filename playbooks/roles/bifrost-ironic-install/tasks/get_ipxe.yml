@@ -34,3 +34,4 @@
     - undionly.kpxe
     - ipxe.pxe
     - ipxe.efi
+    - snponly.efi
