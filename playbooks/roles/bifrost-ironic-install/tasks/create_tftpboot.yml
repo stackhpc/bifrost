@@ -70,12 +70,12 @@
   register: test_is_ipxe_present
   ignore_errors: true
 
-- name: "Abort if iPXE is present"
+- name: "Abort if iPXE is missing"
   fail:
     msg: >
       Aborting installation: The {{ ipxe_efi_binary }} binary was not found
       at the {{ ipxe_dir }} location.  Please place this file or consider
-      re-running with direct_ipxe_download set to a value of true.
+      re-running with download_ipxe set to a value of true.
   when: test_is_ipxe_present.stat.exists | bool == false
 
 - name: "Copy EFI iPXE image into {{ http_boot_folder }}/"
