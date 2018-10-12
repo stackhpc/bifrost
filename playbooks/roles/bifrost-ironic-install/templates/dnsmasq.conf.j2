@@ -96,6 +96,14 @@ dhcp-boot=tag:ipxe,http://192.168.122.1:{{ file_url_port }}/boot.ipxe
 dhcp-boot=tag:ipxe,http://{{ hostvars[inventory_hostname]['ansible_' + ans_network_interface]['ipv4']['address'] }}:{{ file_url_port }}/boot.ipxe
 {% endif %}
 
+{% if enable_uefi_ipxe %}
+dhcp-match=set:efi,option:client-arch,7
+dhcp-match=set:efi,option:client-arch,9
+dhcp-match=set:efi,option:client-arch,11
+# Client is PXE booting over EFI without iPXE ROM; send EFI version of iPXE chainloader
+dhcp-boot=tag:efi,tag:!ipxe,/{{ ipxe_efi_binary }}
+{% endif %}
+
 # Catch-all boot options used when no other boot options are matched.
 dhcp-boot=/undionly.kpxe
 

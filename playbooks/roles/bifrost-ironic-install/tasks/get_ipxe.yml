@@ -33,3 +33,4 @@
   with_items:
     - undionly.kpxe
     - ipxe.pxe
+    - ipxe.efi
