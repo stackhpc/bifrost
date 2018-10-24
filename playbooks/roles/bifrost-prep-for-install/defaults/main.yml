@@ -2,7 +2,7 @@
 # git_root is the folder where to place downloaded git repos
 git_root: "/opt/stack"
 # *_git_url can be overridden by local clones for offline installs
-dib_git_url: https://opendev.org/openstack/diskimage-builder
+dib_git_url: https://github.com/stackhpc/diskimage-builder
 ironicclient_git_url: https://opendev.org/openstack/python-ironicclient
 openstacksdk_git_url: https://opendev.org/openstack/openstacksdk
 shade_git_url: https://opendev.org/openstack/shade
@@ -36,7 +36,7 @@ ironicclient_git_branch: "{{ git_branch }}"
 ironic_git_branch: "{{ git_branch }}"
 openstacksdk_git_branch: "{{ git_branch }}"
 shade_git_branch: "{{ git_branch }}"
-dib_git_branch: master
+dib_git_branch: secureboot
 ironicinspector_git_branch: "{{ git_branch }}"
 ironicinspectorclient_git_branch: "{{ git_branch }}"
 reqs_git_branch: "{{ git_branch }}"
