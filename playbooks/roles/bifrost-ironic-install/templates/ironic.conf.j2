@@ -77,6 +77,9 @@ allow_credentials = {{ enable_cors_credential_support | default('true') }}
 [ilo]
 use_web_server_for_images = true
 
+[ipmi]
+command_retry_timeout = {{ ipmi_command_retry_timeout }}
+
 {% if enable_inspector | bool == true %}
 [inspector]
 enabled = true
