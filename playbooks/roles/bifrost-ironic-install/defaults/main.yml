@@ -27,6 +27,8 @@ skip_package_install: False
 skip_bootstrap: False
 # set to true to skip starting ironic services and dependencies
 skip_start: False
+# set to true to skip performing online data migrations
+skip_migrations: "{{ skip_bootstrap }}"
 
 # Default network interface that bifrost will be attached to.
 # This is used in ipa_* so it must be before
@@ -66,11 +68,11 @@ include_dhcp_server: true
 # *_git_url can be overridden by local clones for offline installs
 dib_git_url: https://github.com/stackhpc/diskimage-builder
 dib_git_branch: secureboot
-ironicclient_git_url: https://git.openstack.org/openstack/python-ironicclient
-shade_git_url: https://git.openstack.org/openstack-infra/shade
-ironic_git_url: https://git.openstack.org/openstack/ironic
-ironicinspector_git_url: https://github.com/openstack/ironic-inspector
-ironicinspectorclient_git_url: https://github.com/openstack/python-ironic-inspector-client
+ironicclient_git_url: https://opendev.org/openstack/python-ironicclient
+shade_git_url: https://opendev.org/openstack/shade
+ironic_git_url: https://opendev.org/openstack/ironic
+ironicinspector_git_url: https://opendev.org/openstack/ironic-inspector
+ironicinspectorclient_git_url: https://opendev.org/openstack/python-ironic-inspector-client
 mysql_username: "root"
 mysql_password: ""
 disable_dnsmasq_dns: False
@@ -83,7 +85,7 @@ upper_constraints_file: "{{ lookup('env', 'UPPER_CONSTRAINTS_FILE') | default(re
 staging_drivers_git_folder: /opt/stack/ironic-staging-drivers
 ironicinspector_git_folder: /opt/stack/ironic-inspector
 ironicinspectorclient_git_folder: /opt/stack/python-ironic-inspector-client
-staging_drivers_git_url: http://git.openstack.org/cgit/openstack/ironic-staging-drivers
+staging_drivers_git_url: https://opendev.org/x/ironic-staging-drivers
 
 # TODO(TheJulia): Add redfish to this list.
 enabled_hardware_types: "ipmi,ilo,cisco-ucs-managed"
