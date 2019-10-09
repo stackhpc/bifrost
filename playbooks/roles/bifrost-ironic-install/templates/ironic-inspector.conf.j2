@@ -18,6 +18,9 @@ transport_url = rabbit://ironic:{{ironic_db_password }}@{{ message_queue_host | 
 transport_url = fake://
 {% endif %}
 
+[capabilities]
+boot_mode = True
+
 [database]
 connection=mysql+pymysql://{{ ironic_inspector.database.username }}:{{ ironic_inspector.database.password }}@{{ ironic_inspector.database.host }}/{{ ironic_inspector.database.name }}?charset=utf8
 
