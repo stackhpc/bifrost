@@ -92,18 +92,20 @@
 - name: "Install pymysql in venv if using"
   include: pip_install.yml
     package=pymysql
+    state=latest
     virtualenv={{ bifrost_venv_dir }}
-  when: skip_install is not defined and (enable_venv | bool == true)
+  when:
+    - skip_install is not defined
+    - enable_venv | bool == true
 
-# NOTE(hwoarang): The python-pymysql package is not available on the CentOS7
-# and old Debian/Ubuntu repositories so we need to get it via pip
-- name: "Install pymysql on CentOS/Ubuntu if necessary"
+- name: "Install pymysql for non-venv environments to support Ansible"
   include: pip_install.yml
     package=pymysql
   when:
     - skip_install is not defined
     - enable_venv | bool == false
-    - (ansible_distribution == 'CentOS' and ansible_distribution_major_version|version_compare('7', '<=')) or
+    - ansible_distribution == 'CentOS' or
+      (ansible_distribution == 'CentOS' and ansible_distribution_major_version|version_compare('7', '<=')) or
       (ansible_distribution == 'Ubuntu' and ansible_distribution_version|version_compare('14.10', '==')) or
       (ansible_distribution == 'Fedora' and ansible_distribution_version|version_compare('25', '>='))
 
