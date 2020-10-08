@@ -35,7 +35,7 @@ ironicclient_git_branch: "{{ git_branch }}"
 ironic_git_branch: "{{ git_branch }}"
 openstacksdk_git_branch: "{{ git_branch }}"
 shade_git_branch: "{{ git_branch }}"
-dib_git_branch: secureboot
+dib_git_branch: secureboot-master
 ironicinspector_git_branch: "{{ git_branch }}"
 ironicinspectorclient_git_branch: "{{ git_branch }}"
 reqs_git_branch: "{{ git_branch }}"
