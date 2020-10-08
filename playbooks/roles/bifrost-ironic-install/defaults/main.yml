@@ -116,7 +116,7 @@ cirros_deploy_image_upstream_url: https://download.cirros-cloud.net/0.5.1/cirros
 include_dhcp_server: true
 # *_git_url can be overridden by local clones for offline installs
 dib_git_url: https://github.com/stackhpc/diskimage-builder
-dib_git_branch: secureboot
+dib_git_branch: secureboot-master
 ironicclient_git_url: https://opendev.org/openstack/python-ironicclient
 openstacksdk_git_url: https://opendev.org/openstack/openstacksdk
 ironic_git_url: https://opendev.org/openstack/ironic
