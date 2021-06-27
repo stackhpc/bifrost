@@ -1,0 +1,7 @@
+---
+features:
+  - |
+    Adds variables to control HTTP headers used when downloading IPA images:
+    ``ipa_download_headers``, ``ipa_kernel_upstream_headers``,
+    ``ipa_kernel_upstream_checksum_headers``, ``ipa_ramdisk_upstream_headers``,
+    ``ipa_ramdisk_upstream_checksum_headers``.

@@ -72,6 +72,7 @@ use_tinyipa: true
 enable_uefi_ipxe: true
 ipxe_efi_binary: ipxe.efi
 
+ipa_download_headers: {}
 ipa_kernel: "{{http_boot_folder}}/ipa.kernel"
 ipa_ramdisk: "{{http_boot_folder}}/ipa.initramfs"
 ipa_kernel_url: "{{ ipa_file_protocol }}://{{ internal_ip }}:{{ file_url_port }}/ipa.kernel"
@@ -85,6 +86,8 @@ ipa_kernel_upstream_url: >-
   {%- endif -%}
 ipa_kernel_upstream_checksum_algo: "sha256"
 ipa_kernel_upstream_checksum_url: "{{ ipa_kernel_upstream_url }}.{{ ipa_kernel_upstream_checksum_algo }}"
+ipa_kernel_upstream_headers: "{{ ipa_download_headers }}"
+ipa_kernel_upstream_checksum_headers: "{{ ipa_kernel_upstream_headers }}"
 ipa_ramdisk_url: "{{ ipa_file_protocol }}://{{ internal_ip }}:{{ file_url_port }}/ipa.initramfs"
 ipa_ramdisk_upstream_url: >-
   {%- if use_tinyipa | bool -%}
@@ -96,6 +99,8 @@ ipa_ramdisk_upstream_url: >-
   {%- endif -%}
 ipa_ramdisk_upstream_checksum_algo: "sha256"
 ipa_ramdisk_upstream_checksum_url: "{{ ipa_ramdisk_upstream_url }}.{{ ipa_ramdisk_upstream_checksum_algo }}"
+ipa_ramdisk_upstream_headers: "{{ ipa_download_headers }}"
+ipa_ramdisk_upstream_checksum_headers: "{{ ipa_ramdisk_upstream_headers }}"
 deploy_image_filename: "deployment_image.qcow2"
 deploy_image: "{{http_boot_folder}}/{{deploy_image_filename}}"
 # Use cirros instead of building an image via diskimage-builder

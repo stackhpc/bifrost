@@ -269,6 +269,20 @@ ssh_private_key: If a user wishes to define an SSH private key as a string,
                  this variable can be utilized which overrides the
                  ssh_private_key_path setting.
 
+### Ironic Python Agent
+
+ipa_download_headers: HTTP headers to use when downloading IPA.
+
+ipa_kernel_upstream_headers: Override ``ipa_download_headers`` for the kernel.
+
+ipa_kernel_upstream_checksum_headers: Override ``ipa_kernel_upstream_headers``
+                                      for the kernel checksum.
+
+ipa_ramdisk_upstream_headers: Override ``ipa_download_headers`` for the ramdisk.
+
+ipa_ramdisk_upstream_checksum_headers: Override ``ipa_ramdisk_upstream_headers``
+                                       for the ramdisk checksum.
+
 ### Changing Database Configuration
 
 Bifrost utilizes a nested data stucture for the configuration of database.
