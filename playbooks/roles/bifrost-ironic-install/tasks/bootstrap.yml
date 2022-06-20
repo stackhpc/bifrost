@@ -141,6 +141,9 @@
     crypt_scheme: bcrypt
     name: "{{ admin_username }}"
     password: "{{ admin_password }}"
+    owner: ironic
+    group: ironic
+    mode: 0600
   when:
     - not enable_keystone | bool
 
@@ -150,6 +153,9 @@
     crypt_scheme: bcrypt
     name: "{{ default_username }}"
     password: "{{ default_password }}"
+    owner: ironic
+    group: ironic
+    mode: 0600
   when:
     - not noauth_mode | bool
     - not enable_keystone | bool
@@ -382,10 +388,21 @@
     in_interface: "{{ network_interface }}"
     jump: ACCEPT
   loop:
-    - 68
-    - 69
     - "{{ file_url_port }}"
     - 6385
+  when: not use_firewalld | bool
+
+- name: "Explicitly permit DHCP and TFTP ports"
+  iptables:
+    chain: INPUT
+    action: insert
+    protocol: udp
+    destination_port: "{{ item }}"
+    in_interface: "{{ network_interface }}"
+    jump: ACCEPT
+  loop:
+    - 67
+    - 69
   when: not use_firewalld | bool
 
 - name: "Enable services in firewalld"
