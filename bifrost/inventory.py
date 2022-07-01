@@ -95,14 +95,12 @@ Example JSON Element:
         "neutron"
     ],
     "driver_info": {
-      "power": {
-        "ipmi_target_channel": "0",
-        "ipmi_username": "ADMIN",
-        "ipmi_address": "192.168.122.1",
-        "ipmi_target_address": "0",
-        "ipmi_password": "undefined",
-        "ipmi_bridging": "single"
-      }
+      "ipmi_target_channel": "0",
+      "ipmi_username": "ADMIN",
+      "ipmi_address": "192.168.122.1",
+      "ipmi_target_address": "0",
+      "ipmi_password": "undefined",
+      "ipmi_bridging": "single"
     },
     "nics": [
       {
@@ -189,6 +187,9 @@ def _process_baremetal_data(data_source, groups, hostvars):
             continue
 
         host = file_data[name]
+        if 'name' not in host:
+            host['name'] = name
+
         # Perform basic validation
         node_net_data = host.get('node_network_data')
         ipv4_addr = host.get('ipv4_address')
@@ -317,6 +318,11 @@ def main():
         # Empty groups
         if len(groups[group]['hosts']) == 0:
             del groups[group]
+
+    # FIXME(dtantsur): there is a conflict between the Bifrost's and the node's
+    # network_interface. Drop the node's one for now.
+    for host, items in hostvars.items():
+        items.pop('network_interface', None)
 
     # General Data Conversion
 

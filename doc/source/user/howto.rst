@@ -15,7 +15,9 @@ clouds.yaml
 
 During installation, Bifrost creates a ``clouds.yaml`` file with credentials
 necessary to access Ironic. A cloud called ``bifrost`` is always available. For
-example::
+example:
+
+.. code-block:: bash
 
     export OS_CLOUD=bifrost
     baremetal node list
@@ -29,15 +31,12 @@ example::
 Environment variables
 ---------------------
 
-The following two environment variables can be set:
-
-- ``OS_AUTH_TYPE`` - set to ``none`` to bypass authentication.
-- ``OS_ENDPOINT`` - A URL to the ironic API, such as http://localhost:6385/
-
 For convenience, an environment file called ``openrc`` is created in the home
 directory of the current user that contains default values for these variables
 and can be sourced to allow the CLI to connect to a local Ironic installation.
-For example::
+For example:
+
+.. code-block:: bash
 
     . ~/openrc bifrost
     baremetal node list
@@ -52,11 +51,8 @@ Starting with the Victoria release, the ``openstack`` command is only installed
 when Keystone is enabled. Install the ``python-openstackclient`` Python package
 to get this command.
 
-Enroll Hardware
-===============
-
-The openstacksdk library is installed during the install process
-as documented in the install documentation.
+Inventory file format
+=====================
 
 In order to enroll hardware, you will naturally need an inventory of
 your hardware. When utilizing the dynamic inventory module and
@@ -66,87 +62,177 @@ all of which ultimately translate to JSON data that Ansible parses.
 The current method is to utilize a JSON or YAML document which the inventory
 parser will convert and provide to Ansible.
 
-In order to use, you will need to define the environment variable
-``BIFROST_INVENTORY_SOURCE`` to equal a file, which then allows you to
-execute Ansible utilizing the ``bifrost_inventory.py`` file as the data
-source.
+The JSON format resembles the data structure that ironic utilizes internally.
 
-JSON file format
-----------------
+* The ``name``, ``uuid``, ``driver``, and ``properties`` fields are directly
+  mapped through to ironic. Only the ``driver`` is required.
 
-The JSON format closely resembles the data structure that ironic
-utilizes internally.  The ``name``, ``driver_info``, ``nics``,
-``driver``, and ``properties`` fields are directly mapped through to
-ironic.  This means that the data contained within can vary from host
-to host, such as drivers and their parameters thus allowing a mixed
-hardware environment to be defined in a single file.
+  .. note::
+     Most properties are automatically populated during inspection, if it is
+     enabled. However, it is recommended to set the `root device
+     <https://docs.openstack.org/ironic/latest/install/advanced.html#specifying-the-disk-for-deployment-root-device-hints>`_
+     for nodes with multiple disks.
 
-Example::
+* The ``driver_info`` field format matches one of the OpenStack Ansible
+  collection and for legacy reasons can use nested structures ``power``,
+  ``deploy``, ``management`` and ``console``.
+
+  .. note::
+     With newer versions of the collection you should just put all fields under
+     ``driver_info`` directly).
+
+* The ``nics`` field is a list of ports to create. The required field is
+  ``mac`` - MAC address of the port.
+
+Example:
+
+.. code-block:: json
 
   {
       "testvm1": {
-        "uuid": "00000000-0000-0000-0000-000000000001",
+        "name": "testvm1",
+        "driver": "ipmi",
         "driver_info": {
-          "power": {
-            "ipmi_address": "192.168.122.1",
-            "ipmi_username": "admin",
-            "ipmi_password": "pa$$w0rd"
-          }
+          "ipmi_address": "192.168.122.1",
+          "ipmi_username": "admin",
+          "ipmi_password": "pa$$w0rd"
         },
         "nics": [
           {
             "mac": "52:54:00:f9:32:f6"
           }
         ],
-        "driver": "ipmi",
-        "ansible_ssh_host": "192.168.122.2",
-        "ipv4_address": "192.168.122.2",
-        "provisioning_ipv4_address": "10.0.0.9",
         "properties": {
           "cpu_arch": "x86_64",
-          "ram": "3072",
-          "disk_size": "10",
-          "cpus": "1"
-        },
-        "name": "testvm1"
+          "root_device": {"wwn": "0x4000cca77fc4dba1"}
+        }
       }
   }
+
+Overriding instance information
+-------------------------------
 
 The additional power of this format is easy configuration parameter injection,
 which could potentially allow a user to provision different operating system
 images onto different hardware chassis by defining the appropriate settings
-in an ``instance_info`` variable.
+in an ``instance_info`` variable, for example:
+
+.. code-block:: json
+
+  {
+      "testvm1": {
+        "uuid": "00000000-0000-0000-0000-000000000001",
+        "name": "testvm1",
+        "driver": "redfish",
+        "driver_info": {
+          "redfish_address": "https://bmc.myhost.com",
+          "redfish_system_id": "/redfish/v1/Systems/11",
+          "redfish_username": "admin"
+          "redfish_password": "pa$$w0rd",
+        },
+        "nics": [
+          {
+            "mac": "52:54:00:f9:32:f6"
+          }
+        ],
+        "properties": {
+          "cpu_arch": "x86_64",
+          "root_device": {"wwn": "0x4000cca77fc4dba1"}
+        },
+        "instance_info": {
+          "image_source": "http://image.server/image.qcow2",
+          "image_checksum": "<md5 checksum>",
+          "configdrive": {
+            "meta_data": {
+              "public_keys": {"0": "ssh-rsa ..."},
+              "hostname": "vm1.example.com"
+            }
+          }
+        }
+      }
+  }
+
+The ``instance_info`` format is documented in the `Ironic deploy guide
+<https://docs.openstack.org/ironic/latest/user/deploy.html#populating-instance-information>`_.
+The ability to populate ``configdrive`` this way is a Bifrost-specific feature,
+but the ``configdrive`` itself follows the Ironic format.
 
 Examples utilizing JSON and YAML formatting, along host specific variable
 injection can be found in the ``playbooks/inventory/`` folder.
 
+Static network configuration
+----------------------------
+
+When building a configdrive, Bifrost can embed static networking configuration
+in it. This configuration will be applied by the first-boot service, such
+as cloud-init_ or glean_. The following fields can be set:
+
+``ipv4_address``
+    The IPv4 address of the node. If missing, the configuration is not
+    provided in the configdrive.
+
+    When ``ipv4_address`` is set, it's also used as the default for
+    ``ansible_ssh_host``. Because of this, you can run SSH commands against
+    deployed hosts, as long as you use the Bifrost's inventory plugin.
+
+    This parameter can also used for :doc:`DHCP configuration <dhcp>`.
+``ipv4_subnet_mask``
+    The subnet mask of the IP address. Defaults to `255.255.255.0`.
+``ipv4_interface_mac``
+    MAC address of the interface to configure. If missing, the MAC address of
+    the first NIC defined in the inventory is used.
+``ipv4_gateway``
+    IPv4 address of the default router. A default value is only provided
+    for testing case.
+``ipv4_nameserver``
+    The server to use for name resolution (a string or a list).
+``network_mtu``
+    MTU to use for the link.
+
+For example:
+
+.. code-block:: json
+
+  {
+      "testvm1": {
+        "name": "testvm1",
+        "driver": "redfish",
+        "driver_info": {
+          "redfish_address": "https://bmc.myhost.com",
+          "redfish_system_id": "/redfish/v1/Systems/11",
+          "redfish_username": "admin"
+          "redfish_password": "pa$$w0rd",
+        },
+        "ipv4_address": "192.168.122.42",
+        "ipv4_subnet_mask": "255.255.255.0",
+        "ipv4_gateway": "192.168.122.1",
+        "ipv4_nameserver": "8.8.8.8",
+        "nics": [
+          {
+            "mac": "52:54:00:f9:32:f6"
+          }
+        ],
+        "properties": {
+          "cpu_arch": "x86_64",
+          "root_device": {"wwn": "0x4000cca77fc4dba1"}
+        }
+      }
+  }
+
+.. warning::
+   Static network configuration only works this way if you let Bifrost generate
+   the configdrive.
+
 .. _enroll:
 
-How this works?
----------------
+Enroll Hardware
+===============
 
-Starting with the Wallaby cycle, you can use ``bifrost-cli`` for enrolling::
+Starting with the Wallaby cycle, you can use ``bifrost-cli`` for enrolling:
+
+.. code-block:: bash
 
     ./bifrost-cli enroll /tmp/baremetal.json
-
-Utilizing the dynamic inventory module, enrollment is as simple as setting
-the ``BIFROST_INVENTORY_SOURCE`` environment variable to your inventory data
-source, and then executing the enrollment playbook.::
-
-  export BIFROST_INVENTORY_SOURCE=/tmp/baremetal.json
-  ansible-playbook -vvvv -i inventory/bifrost_inventory.py enroll-dynamic.yaml
-
-When ironic is installed on remote server, a regular ansible inventory
-with a target server should be added to ansible. This can be achieved by
-specifying a directory with files, each file in that directory will be part of
-the ansible inventory. Refer to ansible documentation
-http://docs.ansible.com/ansible/intro_dynamic_inventory.html#using-inventory-directories-and-multiple-inventory-sources
-
-::
-
-  export BIFROST_INVENTORY_SOURCE=/tmp/baremetal.json
-  rm inventory/*.example
-  ansible-playbook -vvvv -i inventory/ enroll-dynamic.yaml
 
 Note that enrollment is a one-time operation. The Ansible module *does not*
 synchronize data for existing nodes.  You should use the ironic CLI to do this
@@ -160,57 +246,136 @@ split into three separate playbooks based on the ``ipmi_bridging`` setting.
 Deploy Hardware
 ===============
 
-How this works?
----------------
-
 After the nodes are enrolled, they can be deployed upon.  Bifrost is geared to
 utilize configuration drives to convey basic configuration information to the
 each host. This configuration information includes an SSH key to allow a user
 to login to the system.
 
-To utilize the newer dynamic inventory based deployment::
+Starting with the Yoga cycle, you can use ``bifrost-cli`` for deploying. If
+you used ``bifrost-cli`` for installation, you should pass its environment
+variables, as well as the inventory file (see `Inventory file format`_):
+
+.. code-block:: bash
+
+    ./bifrost-cli deploy /tmp/baremetal.json \
+        -e @baremetal-install-env.json
+
+.. note::
+   By default, the playbook will return once the deploy has started. Pass
+   the ``--wait`` flag to wait for completion.
+
+The inventory file may override some deploy settings, such as images or even
+the complete ``instance_info``, per node.  If you omit it, all nodes from
+Ironic will be deployed using the Bifrost defaults:
+
+.. code-block:: bash
+
+    ./bifrost-cli deploy -e @baremetal-install-env.json
+
+Command line parameters
+-----------------------
+
+By default the playbooks use the image, downloaded or built during
+installation. You can also use a custom image:
+
+.. code-block:: bash
+
+    ./bifrost-cli deploy -e @baremetal-install-env.json \
+        --image http://example.com/images/my-image.qcow2 \
+        --image-checksum 91ebfb80743bb98c59f787c9dc1f3cef \
+
+You can also provide a custom configdrive URL (or its content) instead of
+the one Bifrost builds for you:
+
+.. code-block:: bash
+
+    ./bifrost-cli deploy -e @baremetal-install-env.json \
+        --config-drive '{"meta_data": {"public_keys": {"0": "'"$(cat ~/.ssh/id_rsa.pub)"'"}}}' \
+
+File images do not require a checksum:
+
+.. code-block:: bash
+
+    ./bifrost-cli deploy -e @baremetal-install-env.json \
+        --image file:///var/lib/ironic/custom-image.qcow2
+
+.. note:: Files must be readable by Ironic. Your home directory is often not.
+
+Partition images can de deployed by specifying an image type:
+
+.. code-block:: bash
+
+    ./bifrost-cli deploy -e @baremetal-install-env.json \
+        --image http://example.com/images/my-image.qcow2 \
+        --image-checksum 91ebfb80743bb98c59f787c9dc1f3cef \
+        --partition
+
+.. note::
+   The default root partition size is 10 GiB. Set the ``deploy_root_gb``
+   parameter to override or use a first-boot service such as cloud-init to
+   grow the root partition automatically.
+
+Redeploy Hardware
+=================
+
+If the hosts need to be re-deployed, the dynamic redeploy playbook may be used:
+
+.. code-block:: bash
 
   export BIFROST_INVENTORY_SOURCE=/tmp/baremetal.json
-  ansible-playbook -vvvv -i inventory/bifrost_inventory.py deploy-dynamic.yaml
-
-When ironic is installed on remote server, a regular ansible inventory
-with a target server should be added to ansible. This can be achieved by
-specifying a directory with files, each file in that directory will be part of
-the ansible inventory. Refer to ansible documentation
-http://docs.ansible.com/ansible/intro_dynamic_inventory.html#using-inventory-directories-and-multiple-inventory-sources
-
-::
-
-  export BIFROST_INVENTORY_SOURCE=/tmp/baremetal.json
-  rm inventory/*.example
-  ansible-playbook -vvvv -i inventory/ deploy-dynamic.yaml
-
-Note::
-
-  Before running the above command, ensure that the value for
-  `ssh_public_key_path` in ``./playbooks/inventory/group_vars/baremetal``
-  refers to a valid public key file, or set the ssh_public_key_path option
-  on the ansible-playbook command line by setting the variable.
-  Example: "-e ssh_public_key_path=~/.ssh/id_rsa.pub"
-
-If the hosts need to be re-deployed, the dynamic redeploy playbook may be used::
-
-  export BIFROST_INVENTORY_SOURCE=/tmp/baremetal.json
+  cd playbooks
   ansible-playbook -vvvv -i inventory/bifrost_inventory.py redeploy-dynamic.yaml
 
 This playbook will undeploy the hosts, followed by a deployment, allowing
 a configurable timeout for the hosts to transition in each step.
+
+Use playbooks instead of bifrost-cli
+====================================
+
+Using playbooks directly allows you full control over what is executed by
+Bifrost, with what variables and using what inventory.
+
+Utilizing the dynamic inventory module, enrollment is as simple as setting
+the ``BIFROST_INVENTORY_SOURCE`` environment variable to your inventory data
+source, and then executing the enrollment playbook:
+
+.. code-block:: bash
+
+  export BIFROST_INVENTORY_SOURCE=/tmp/baremetal.json
+  cd playbooks
+  ansible-playbook -vvvv -i inventory/bifrost_inventory.py enroll-dynamic.yaml
+
+To utilize the dynamic inventory based deployment:
+
+.. code-block:: bash
+
+  export BIFROST_INVENTORY_SOURCE=/tmp/baremetal.json
+  cd playbooks
+  ansible-playbook -vvvv -i inventory/bifrost_inventory.py deploy-dynamic.yaml
+
+If you used ``bifrost-cli`` for installation, you should pass its environment
+variables:
+
+.. code-block:: bash
+
+  export BIFROST_INVENTORY_SOURCE=/tmp/baremetal.json
+  cd playbooks
+  ansible-playbook -vvvv \
+    -i inventory/bifrost_inventory.py \
+    -e @../baremetal-install-env.json \
+    deploy-dynamic.yaml
 
 Deployment and configuration of operating systems
 =================================================
 
 By default, Bifrost deploys a configuration drive which includes the user SSH
 public key, hostname, and the network configuration in the form of
-network_data.json that can be read/parsed by the
-`glean <https://opendev.org/opendev/glean>`_ utility. This allows for
+network_data.json that can be read/parsed by
+`glean <https://opendev.org/opendev/glean>`_ or `cloud-init
+<https://cloudinit.readthedocs.io/en/latest/>`_. This allows for
 the deployment of Ubuntu, CentOS, or Fedora "tenants" on baremetal.
 
-By default, Bifrost utilizes a utility called simple-init which leverages
+By default, Bifrost utilizes a utility called *simple-init* which leverages
 the previously noted glean utility to apply network configuration.  This
 means that by default, root file systems may not be automatically expanded
 to consume the entire disk, which may, or may not be desirable depending
@@ -224,25 +389,42 @@ Due to the nature of the design, it would be relatively easy for a user to
 import automatic growth or reconfiguration steps either in the image to be
 deployed, or in post-deployment steps via custom Ansible playbooks.
 
+To be able to access nodes via SSH, ensure that the value for
+`ssh_public_key_path` in ``./playbooks/inventory/group_vars/baremetal``
+refers to a valid public key file, or set the ``ssh_public_key_path`` variable
+on the command line, e.g. ``-e ssh_public_key_path=~/.ssh/id_rsa.pub``.
+
+Advanced topics
+===============
+
+Using a remote ironic
+---------------------
+
+When ironic is installed on remote server, a regular ansible inventory
+with a target server should be added to ansible. This can be achieved by
+specifying a directory with files, each file in that directory will be part of
+the ansible inventory. Refer to ansible documentation
+http://docs.ansible.com/ansible/intro_dynamic_inventory.html#using-inventory-directories-and-multiple-inventory-sources.
+Example:
+
+.. code-block:: bash
+
+  export BIFROST_INVENTORY_SOURCE=/tmp/baremetal.json
+  cd playbooks
+  rm inventory/*.example
+  ansible-playbook -vvvv -i inventory/ enroll-dynamic.yaml
+
 Build Custom Ironic Python Agent (IPA) images
-=============================================
+---------------------------------------------
 
-Bifrost supports the ability for a user to build a custom IPA ramdisk
-utilizing diskimage-builder and ironic-python-agent-builder. In order
-to utilize this feature, the ``download_ipa`` setting must be set to ``false``
-and the create_ipa_image must be set to "true".  By default, the install
-playbook will build a Debian Bullseye based IPA image, if a pre-existing IPA
-image is not present on disk. If you wish to explicitly set a specific release
-to be passed to diskimage-create, then the setting ``dib_os_release`` can be
-set in addition to ``dib_os_element``.
+Content moved, see :ref:`custom-ipa-images`.
 
-If you wish to include an extra element into the IPA disk image, such as a
-custom hardware manager, you can pass the variable ``ipa_extra_dib_elements``
-as a space-separated list of elements. This defaults to an empty string.
+Configuring the integrated DHCP server
+--------------------------------------
 
-.. include:: dhcp.rst
+Content moved, see :doc:`dhcp`.
 
 Use Bifrost with Keystone
-=========================
+-------------------------
 
 Content moved, see :doc:`keystone`.

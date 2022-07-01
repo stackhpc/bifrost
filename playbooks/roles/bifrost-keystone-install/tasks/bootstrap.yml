@@ -22,8 +22,8 @@
       --network-interface argument to "bifrost-cli install".
   when: ('ansible_' + ans_network_interface) not in hostvars[inventory_hostname]
 
-- name: "Get keystone-wsgi-admin location"
-  shell: echo $(dirname $(which keystone-wsgi-admin))
+- name: "Get keystone-wsgi-public location"
+  shell: echo $(dirname $(which keystone-wsgi-public))
   register: keystone_install_prefix
   environment: "{{ bifrost_venv_env }}"
 
@@ -109,8 +109,15 @@
     name: "/etc/keystone"
     state: directory
     owner: "keystone"
-    group: "keystone"
-    mode: 0755
+    group: "{{ nginx_user }}"
+    mode: 0750
+
+- name: "Update ownership on upgrade from Xena"
+  file:
+    name: "/etc/keystone"
+    state: directory
+    owner: "keystone"
+    recurse: yes
 
 - name: "Write keystone configuration from template"
   template:
@@ -118,7 +125,7 @@
     dest: "/etc/keystone/keystone.conf"
     owner: "keystone"
     group: "keystone"
-    mode: 0755
+    mode: 0700
 
 - name: "Apply/Update keystone DB Schema"
   command: keystone-manage db_sync
@@ -127,13 +134,13 @@
 - name: "Setup Fernet key repositories"
   command: >
     keystone-manage fernet_setup
-    --keystone-user="{{ nginx_user }}" --keystone-group="{{ nginx_user }}"
+    --keystone-user="keystone" --keystone-group="{{ nginx_user }}"
   environment: "{{ bifrost_venv_env }}"
 
 - name: "Setup Keystone Credentials"
   command: >
     keystone-manage credential_setup
-    --keystone-user="{{ nginx_user }}" --keystone-group="{{ nginx_user }}"
+    --keystone-user="keystone" --keystone-group="{{ nginx_user }}"
   environment: "{{ bifrost_venv_env }}"
 
 - name: "Setting external Keystone public URL"
@@ -162,14 +169,6 @@
     - test_created_keystone_db.changed
     - keystone.bootstrap.enabled | bool
     - keystone.database.host == 'localhost'
-
-- name: "Reserve keystone admin port"
-  sysctl:
-    name: "net.ipv4.ip_local_reserved_ports"
-    value: 35357
-    sysctl_set: yes
-    state: present
-    reload: yes
 
 - name: "Ensure /var/www/keystone exists"
   file:
@@ -205,18 +204,6 @@
     group: "{{ nginx_user }}"
     mode: 0754
 
-# Note(ashestakov): "copy" module in ansible doesn't support recursive
-# copying on remote host. "cp" command used instead.
-- name: "Copy keystone-wsgi-admin to /var/www/keystone/admin"
-  command: cp -r "{{ keystone_install_prefix.stdout }}/keystone-wsgi-admin" /var/www/keystone/admin
-
-- name: "Ensure owner and mode of keystone-wsgi-admin"
-  file:
-    path: /var/www/keystone/admin
-    owner: "keystone"
-    group: "{{ nginx_user }}"
-    mode: 0754
-
 - name: "Bootstrap uWSGI"
   include_role:
     name: bifrost-uwsgi-install
@@ -225,22 +212,22 @@
 - name: "Place keystone uWSGI config"
   template:
     src: uwsgi-keystone.ini.j2
-    dest: /etc/uwsgi/apps-available/keystone-{{ item }}.ini
+    dest: /etc/uwsgi/apps-available/keystone-public.ini
     owner: "{{ nginx_user }}"
     group: "{{ nginx_user }}" # TODO(TheJulia): Split webserver user/group.
     mode: 0755
-  loop:
-    - public
-    - admin
+
+# NOTE(dtantsur): can be removed after Yoga
+- name: "Remove keystone admin config if present"
+  file:
+    path: /etc/uwsgi/apps-available/keystone-admin.ini
+    state: absent
 
 - name: "Enable keystone in uWSGI"
   file:
-    src: "/etc/uwsgi/apps-available/keystone-{{ item }}.ini"
-    dest: "/etc/uwsgi/apps-enabled/keystone-{{ item }}.ini"
+    src: "/etc/uwsgi/apps-available/keystone-public.ini"
+    dest: "/etc/uwsgi/apps-enabled/keystone-public.ini"
     state: link
-  loop:
-    - public
-    - admin
 
 - name: "Place nginx configuration for keystone"
   # TODO(TheJulia): Refactor this so we use sites-enabled, but bifrost's

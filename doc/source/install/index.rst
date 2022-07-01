@@ -12,31 +12,19 @@ using Bifrost.
 Supported operating systems
 ===========================
 
-1st tier support (fully tested in the CI, no known or potential issues):
+Full support (fully tested in the CI, no known or potential issues):
 
-* CentOS Stream 8
+* CentOS Stream 9
+
+  .. note::
+     RHEL 9 and derivatives are assumed to work but not tested explicitly.
+
 * Ubuntu 20.04 "Focal"
 * Debian 11 "Bullseye"
 
-2nd tier support (limited testing):
-
-* Ubuntu 18.04 "Bionic"
-* Debian 10 "Buster
-
-  Tested in the Bifrost CI only as non-voting jobs (does not block CI in case
-  of failure).
-
-* RHEL 8 and regular CentOS 8
-
-  Only tested indirectly via CentOS Stream 8.
-
-* openSUSE Leap 15.2
-
-  Tested in the CI but has frequent issues.
+Limited support, may be removed at any moment:
 
 * Fedora 34 (32+ is supported but not recommended)
-
-  Only the latest Fedora is tested in the CI.
 
 .. note::
    Operating systems evolve and so does the support for them, even on stable
@@ -68,6 +56,9 @@ Installation of Bifrost can be done in three ways:
 * By directly invoking ``ansible-playbook`` on one of provided playbooks.
 
 * By writing your own playbooks using Ansible roles provided with Bifrost.
+
+If you want to understand what and how is installed by Bifrost, please see
+:doc:`/user/architecture`.
 
 =================
 Pre-install steps
@@ -286,8 +277,8 @@ Additionally, the following parameters can be useful:
 ``--enable-prometheus-exporter``
     Enable the Ironic Prometheus Exporter service.
 
-``--uefi``
-    Boot machines in the UEFI mode by default.
+``--uefi`` / ``--legacy-boot``
+    Boot machines in the UEFI or BIOS mode by default (defaults to UEFI).
 
 ``--disable-dhcp``
     Disable the configuration of the integrated DHCP server, allowing to use
@@ -303,6 +294,28 @@ See the built-in documentation for more details:
 .. code-block:: bash
 
     ./bifrost-cli install --help
+
+The Ansible variables generated for installation are stored in a JSON file
+(``baremetal-install-env.json`` by default) that should be passed via the
+``-e`` flag to subsequent playbook or command invokations.
+
+.. _custom-ipa-images:
+
+Build Custom Ironic Python Agent (IPA) images
+=============================================
+
+Bifrost supports the ability for a user to build a custom IPA ramdisk
+utilizing diskimage-builder and ironic-python-agent-builder. In order
+to utilize this feature, the ``download_ipa`` setting must be set to ``false``
+and the create_ipa_image must be set to "true".  By default, the install
+playbook will build a Debian Bullseye based IPA image, if a pre-existing IPA
+image is not present on disk. If you wish to explicitly set a specific release
+to be passed to diskimage-create, then the setting ``dib_os_release`` can be
+set in addition to ``dib_os_element``.
+
+If you wish to include an extra element into the IPA disk image, such as a
+custom hardware manager, you can pass the variable ``ipa_extra_dib_elements``
+as a space-separated list of elements. This defaults to an empty string.
 
 Using Bifrost
 =============

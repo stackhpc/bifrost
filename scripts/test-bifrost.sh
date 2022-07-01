@@ -5,7 +5,6 @@ set -euxo pipefail
 export PYTHONUNBUFFERED=1
 SCRIPT_HOME="$(cd "$(dirname "$0")" && pwd)"
 BIFROST_HOME=$SCRIPT_HOME/..
-ANSIBLE_INSTALL_ROOT=${ANSIBLE_INSTALL_ROOT:-/opt/stack}
 USE_DHCP="${USE_DHCP:-false}"
 BUILD_IMAGE="${BUILD_IMAGE:-false}"
 BAREMETAL_DATA_FILE=${BAREMETAL_DATA_FILE:-'/tmp/baremetal.json'}
@@ -73,6 +72,12 @@ if which setenforce &> /dev/null; then
     sudo setenforce Enforcing
 fi
 
+if [ ${USE_CIRROS} = "true" ] && [ ! -f "$HOME/.ssh/id_ecdsa.pub" ]; then
+    # CentOS/RHEL 8 and 9, as well as Fedora, do not work with the RSA key
+    # that the Cirros' SSH server uses. Generate an ECDSA key pair instead.
+    ssh-keygen -t ECDSA -f "$HOME/.ssh/id_ecdsa" -N ""
+fi
+
 # Note(cinerama): activate is not compatible with "set -u";
 # disable it just for this line.
 set +u
@@ -98,16 +103,6 @@ elif [ ${BUILD_IMAGE} = "true" ]; then
     DOWNLOAD_IPA=false
     CREATE_IPA_IMAGE=true
 
-    # if running in OpenStack CI, then make sure epel is enabled
-    # since it may already be present (but disabled) on the host
-    # we need epel for debootstrap
-    if env | grep -q ^ZUUL; then
-        if [[ "$OS_DISTRO" == "rhel" ]] || [[ "$OS_DISTRO" == "centos" ]]; then
-            sudo dnf install -y dnf-utils
-            sudo dnf install -y epel-release || true
-            sudo dnf config-manager --set-enabled epel || true
-        fi
-    fi
 elif [ ${ENABLE_KEYSTONE} = "true" ]; then
     NOAUTH_MODE=false
     CLOUD_CONFIG+=" -e cloud_name=bifrost"
@@ -125,21 +120,10 @@ if [ ${USE_VMEDIA} = "true" ]; then
     CLOUD_CONFIG+=" -e enabled_hardware_types=redfish"
 fi
 
-CURRENT_CRYPTO_POLICY=
-if [ ${USE_CIRROS} = "true" ] && which update-crypto-policies 2>&1 > /dev/null; then
-    # Crypto policies in newer Fedora prevent SSH into Cirros
-    CURRENT_CRYPTO_POLICY=$(sudo update-crypto-policies --show)
-    sudo update-crypto-policies --set LEGACY
-fi
-
 on_exit() {
-    if [ -n "$CURRENT_CRYPTO_POLICY}" ]; then
-        sudo update-crypto-policies --set $CURRENT_CRYPTO_POLICY || true
-    fi
     $SCRIPT_HOME/collect-test-info.sh
 }
 trap on_exit EXIT
-trap on_exit ERR
 
 # Change working directory
 cd $BIFROST_HOME/playbooks
@@ -196,6 +180,7 @@ ${ANSIBLE} -vvvv \
     -i inventory/target \
     ${TEST_PLAYBOOK} \
     -e use_cirros=${USE_CIRROS} \
+    -e use_tinyipa=true \
     -e testing_user=${TESTING_USER} \
     -e test_vm_num_nodes=${TEST_VM_NUM_NODES} \
     -e inventory_dhcp=${INVENTORY_DHCP} \

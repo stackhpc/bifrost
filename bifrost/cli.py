@@ -15,6 +15,7 @@ import argparse
 import configparser
 import ipaddress
 import itertools
+import json
 import os
 import subprocess
 import sys
@@ -56,11 +57,20 @@ def process_extra_vars(extra_vars):
 
 
 def ansible(playbook, inventory, verbose=False, env=None, extra_vars=None,
-            **params):
+            params_output_file=None, **params):
     extra = COMMON_PARAMS[:]
-    extra.extend(itertools.chain.from_iterable(
-        ('-e', '%s=%s' % pair) for pair in params.items()
-        if pair[1] is not None))
+    if params_output_file is None:
+        extra.extend(itertools.chain.from_iterable(
+            ('-e', '%s=%s' % pair) for pair in params.items()
+            if pair[1] is not None))
+    else:
+        params_output_file = os.path.abspath(params_output_file)
+        log('Writing environment file', params_output_file, only_if=verbose)
+        with open(params_output_file, 'wt') as output:
+            json.dump({k: v for k, v in params.items() if v is not None},
+                      output)
+        extra.extend(['-e', '@%s' % params_output_file])
+
     if extra_vars:
         extra.extend(itertools.chain.from_iterable(
             process_extra_vars(extra_vars)))
@@ -123,7 +133,7 @@ def cmd_testenv(args):
             test_vm_disk_gib=args.disk,
             test_vm_domain_type=args.domain_type,
             test_vm_node_driver=args.driver,
-            default_boot_mode='uefi' if args.uefi else 'bios',
+            default_boot_mode=args.boot_mode or 'uefi',
             baremetal_json_file=os.path.abspath(args.inventory),
             baremetal_nodes_json=os.path.abspath(args.output),
             extra_vars=args.extra_vars,
@@ -154,14 +164,14 @@ def cmd_install(args):
     ansible('install.yaml',
             inventory='inventory/target',
             verbose=args.debug,
-            create_ipa_image='false',
-            create_image_via_dib='false',
-            install_dib='true',
+            create_ipa_image=False,
+            create_image_via_dib=False,
+            install_dib=True,
             network_interface=args.network_interface,
             enable_keystone=args.enable_keystone,
             enable_tls=args.enable_tls,
             generate_tls=args.enable_tls,
-            noauth_mode='false',
+            noauth_mode=False,
             enabled_hardware_types=args.hardware_types,
             cleaning_disk_erase=args.cleaning_disk_erase,
             testing=args.testenv,
@@ -169,9 +179,10 @@ def cmd_install(args):
             use_tinyipa=args.testenv,
             developer_mode=args.develop,
             enable_prometheus_exporter=args.enable_prometheus_exporter,
-            default_boot_mode='uefi' if args.uefi else 'bios',
+            default_boot_mode=args.boot_mode or 'uefi',
             include_dhcp_server=not args.disable_dhcp,
             extra_vars=args.extra_vars,
+            params_output_file=args.output,
             **kwargs)
     log("Ironic is installed and running, try it yourself:\n",
         " $ source %s/bin/activate\n" % VENV,
@@ -180,19 +191,63 @@ def cmd_install(args):
         "See documentation for next steps")
 
 
-def cmd_enroll(args):
+def ensure_inside_venv():
+    try:
+        import oslo_config  # noqa
+    except ImportError:
+        sys.exit("This command must be executed inside the Bifrost virtual "
+                 "environment. Try:\n"
+                 f" $ source {VENV}/bin/activate\n"
+                 " $ export OS_CLOUD=bifrost")
+
+
+def configure_inventory(args):
+    ensure_inside_venv()
     inventory = os.path.join(PLAYBOOKS, 'inventory', 'bifrost_inventory.py')
-    if os.path.exists(args.inventory):
+    if not args.inventory:
+        os.environ['BIFROST_INVENTORY_SOURCE'] = 'ironic'
+    elif os.path.exists(args.inventory):
         nodes_inventory = os.path.abspath(args.inventory)
         os.environ['BIFROST_INVENTORY_SOURCE'] = nodes_inventory
     else:
         sys.exit('Inventory file %s cannot be found' % args.inventory)
+    return inventory
 
+
+def cmd_enroll(args):
+    inventory = configure_inventory(args)
     ansible('enroll-dynamic.yaml',
             inventory=inventory,
             verbose=args.debug,
             inspect_nodes=args.inspect,
             extra_vars=args.extra_vars)
+
+
+def cmd_deploy(args):
+    inventory = configure_inventory(args)
+    try:
+        configdrive = json.loads(args.configdrive)
+    except (ValueError, TypeError):
+        configdrive = args.configdrive
+
+    extra_vars = args.extra_vars or []
+    if configdrive:
+        # Need to preserve JSON
+        extra_vars.append(json.dumps({'deploy_config_drive': configdrive}))
+
+    if (args.image and not args.image.startswith('file://') and not
+            args.image_checksum):
+        raise TypeError('An --image-checksum is required with --image '
+                        'when the image is not a local file')
+
+    ansible('deploy-dynamic.yaml',
+            inventory=inventory,
+            verbose=args.debug,
+            deploy_image_source=args.image,
+            deploy_image_type=args.image_type,
+            deploy_image_checksum=args.image_checksum,
+            wait_for_node_deploy=args.wait,
+            extra_vars=extra_vars)
 
 
 def parse_args():
@@ -224,8 +279,13 @@ def parse_args():
     testenv.add_argument('--driver', default='ipmi',
                          choices=['ipmi', 'redfish'],
                          help='driver for testing nodes')
-    testenv.add_argument('--uefi', action='store_true',
-                         help='boot testing VMs with UEFI by default')
+    boot_mode = testenv.add_mutually_exclusive_group()
+    boot_mode.add_argument('--uefi', dest='boot_mode',
+                           action='store_const', const='uefi',
+                           help='boot testing VMs with UEFI by default')
+    boot_mode.add_argument('--legacy-boot', dest='boot_mode',
+                           action='store_const', const='bios',
+                           help='boot testing VMs with legacy boot by default')
     testenv.add_argument('-e', '--extra-vars', action='append',
                          help='additional vars to pass to ansible')
     testenv.add_argument('-o', '--output', default='baremetal-nodes.json',
@@ -261,12 +321,21 @@ def parse_args():
                               'deployments (can take a lot of time)')
     install.add_argument('--enable-prometheus-exporter', action='store_true',
                          help='Enable Ironic Prometheus Exporter')
-    install.add_argument('--uefi', action='store_true',
-                         help='use UEFI by default')
+    boot_mode = install.add_mutually_exclusive_group()
+    boot_mode.add_argument('--uefi', dest='boot_mode',
+                           action='store_const', const='uefi',
+                           help='use UEFI boot by default')
+    boot_mode.add_argument('--legacy-boot', dest='boot_mode',
+                           action='store_const', const='bios',
+                           help='use legacy boot (BIOS) by default')
     install.add_argument('--disable-dhcp', action='store_true',
                          help='Disable integrated dhcp server')
     install.add_argument('-e', '--extra-vars', action='append',
                          help='additional vars to pass to ansible')
+    install.add_argument('-o', '--output',
+                         default='baremetal-install-env.json',
+                         help='output file with the ansible environment used '
+                         'to install Bifrost (excluding -e arguments)')
 
     enroll = subparsers.add_parser(
         'enroll', help='Enroll bare metal nodes')
@@ -276,6 +345,23 @@ def parse_args():
     enroll.add_argument('--inspect', action='store_true',
                         help='inspect nodes while enrolling')
     enroll.add_argument('-e', '--extra-vars', action='append',
+                        help='additional vars to pass to ansible')
+
+    deploy = subparsers.add_parser(
+        'deploy', help='Deploy bare metal nodes')
+    deploy.set_defaults(func=cmd_deploy)
+    deploy.add_argument('inventory', nargs='?',
+                        help='file with the inventory, skip to use Ironic')
+    deploy.add_argument('--image', help='image URL to deploy')
+    deploy.add_argument('--image-checksum',
+                        help='checksum of the image to deploy')
+    deploy.add_argument('--partition', action='store_const',
+                        const='partition', dest='image_type',
+                        help='the image is a partition image')
+    deploy.add_argument('--configdrive', help='URL or JSON with a configdrive')
+    deploy.add_argument('--wait', action='store_true',
+                        help='wait for deployment to be finished')
+    deploy.add_argument('-e', '--extra-vars', action='append',
                         help='additional vars to pass to ansible')
 
     args = parser.parse_args()

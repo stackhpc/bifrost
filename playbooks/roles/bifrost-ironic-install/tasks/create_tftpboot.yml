@@ -15,11 +15,27 @@
 ---
 # TODO(TheJulia): The pxelinux folder is statically coded in ironic.
 # For now, we need to use it, but we can patch that.
-- name: "Set up PXE and iPXE folders"
-  file: name={{ item }} owner=ironic group=ironic state=directory mode=0755
+- name: "Set up PXE folders"
+  file:
+    name: "{{ item }}"
+    owner: ironic
+    group: ironic
+    state: directory
+    # FIXME(dtantsur): dnsmasq cannot work if the files are not world readable
+    # or owned by it, I don't understand why.
+    mode: 0755
   loop:
     - "{{ tftp_boot_folder }}"
     - "{{ tftp_boot_folder }}/pxelinux.cfg"
+
+- name: "Set up HTTP folders"
+  file:
+    name: "{{ item }}"
+    owner: ironic
+    group: ironic
+    state: directory
+    mode: "{{ boot_folder_permissions }}"
+  loop:
     - "{{ http_boot_folder }}"
     - "{{ http_boot_folder }}/pxelinux.cfg"
 
@@ -27,8 +43,11 @@
   service: name="{{ tftp_service_name }}" state=stopped enabled=no
   ignore_errors: yes
 
-- name: "Place boot.ipxe helper script /etc/ironic"
-  copy: src=boot.ipxe dest=/etc/ironic/boot.ipxe owner=ironic group=ironic mode=0744
+# NOTE(dtantsur): the code to remove boot.ipxe can be removed after Yoga
+- name: Remove the stale boot.ipxe
+  file:
+    path: /etc/ironic/boot.ipxe
+    state: absent
 
 # NOTE(dtantsur): the code to migrate from xinetd can be removed after Xena
 

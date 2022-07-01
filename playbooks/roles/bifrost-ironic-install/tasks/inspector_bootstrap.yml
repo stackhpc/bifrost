@@ -78,6 +78,9 @@
     crypt_scheme: bcrypt
     name: "{{ admin_username }}"
     password: "{{ admin_password }}"
+    owner: ironic
+    group: ironic
+    mode: 0600
   when:
     - not noauth_mode | bool
     - not enable_keystone | bool
@@ -88,6 +91,9 @@
     crypt_scheme: bcrypt
     name: "{{ default_username }}"
     password: "{{ default_password }}"
+    owner: ironic
+    group: ironic
+    mode: 0600
   when:
     - not noauth_mode | bool
     - not enable_keystone | bool
@@ -111,7 +117,7 @@
     dest=/etc/ironic-inspector/inspector.conf
     owner=ironic
     group=ironic
-    mode=0740
+    mode=0640
 - name: "Inspector - Create the log directories (if requested)"
   file:
     name: "{{ item }}"
@@ -134,15 +140,13 @@
 - name: "Inspector - Place service"
   template:
     src: systemd_template.j2
-    dest: "{{ init_dest_dir }}{{ item.service_name }}.service"
+    dest: "{{ init_dest_dir }}ironic-inspector.service"
     owner: root
     group: root
-  # FIXME(dtantsur): this is an awkward way to use loop...
-  loop:
-    - service_path: "{{ ironic_install_prefix.stdout | default('') }}"
-      service_name: 'ironic-inspector'
-      username: 'ironic'
-      args: '--config-file /etc/ironic-inspector/inspector.conf'
+  vars:
+    service_path: "{{ ironic_install_prefix.stdout | default('') }}"
+    service_name: 'ironic-inspector'
+    config_file: '/etc/ironic-inspector/inspector.conf'
 - name: "Inspector - Explicitly permit TCP/5050 for ironic-inspector callback"
   iptables:
     chain: INPUT

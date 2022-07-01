@@ -34,19 +34,6 @@ Example error::
     NodeLocked: Node 00000000-0000-0000-0000-046ebb96ec21 is locked by
     host $HOSTNAME, please retry after the current operation is completed.
 
-*****************************************************
-New image appears not to be deploying upon deployment
-*****************************************************
-
-When deploying a new image with the same previous name, it is necessary to
-purge the contents of the TFTP master_images folder which caches the image
-file for deployments.  The default location for this folder is
-``/tftpboot/master_images``.
-
-Additionally, a playbook has been included that can be used prior to a
-re-installation to ensure fresh images are deployed.  This playbook can
-be found at ``playbooks/cleanup-deployment-images.yaml``.
-
 *********************
 Building an IPA image
 *********************
@@ -74,11 +61,7 @@ use to create an IPA image for Bifrost are the same as for ironic. See:
 https://docs.openstack.org/ironic/latest/install/deploy-ramdisk.html
 
 Once your build is completed, you will need to copy the images files into
-the ``/httpboot`` folder.
-
-Since you have updated the image to be deployed, you will need to purge the
-contents of ``/tftpboot/master_images`` for the new image to be utilized for
-the deployment process.
+the ``/var/lib/ironic/httpboot`` folder.
 
 *********************************************
 Unexpected/Unknown failure with the IPA Agent
@@ -106,8 +89,8 @@ Obtaining IPA logs via the console
    the video mode, defines the console as ttyS0 or the first serial port, and
    instructs systemd to direct logs to the console.
 
-2) Once set, restart the ironic-conductor service, e.g.
-   ``service ironic-conductor restart`` and attempt to redeploy the node.
+2) Once set, restart the ironic service, e.g.
+   ``systemctl restart ironic`` and attempt to redeploy the node.
    You will want to view the system console occurring. If possible, you
    may wish to use ``ipmitool`` and write the output to a log file.
 
@@ -162,7 +145,10 @@ Changing from TinyIPA to another IPA Image
 With-in the Newton cycle, the default IPA image for Bifrost was changed
 to TinyIPA, which is based on Tiny Core Linux. This has a greatly reduced
 boot time for testing, however should be expected to have less hardware
-support. If on a fresh install, or a re-install, you wish to change to
+support. In the Yoga cycle, the default image was changed to one based
+on CentOS.
+
+If on a fresh install, or a re-install, you wish to change to
 DIB-based or any other IPA image, you will need to take the following steps:
 
 #. Remove the existing IPA image ipa.kernel and ipa.initramfs.
@@ -170,9 +156,9 @@ DIB-based or any other IPA image, you will need to take the following steps:
    file and update the ``ipa_kernel_upstream_url`` and
    ``ipa_kernel_upstream_url`` settings to a new URL.
    For DIB-based images, these urls would be,
-   ``https://tarballs.openstack.org/ironic-python-agent/dib/files/ipa-centos8-master.kernel``
+   ``https://tarballs.opendev.org/openstack/ironic-python-agent/dib/files/ipa-centos9-master.kernel``
    and
-   ``https://tarballs.openstack.org/ironic-python-agent/dib/files/ipa-centos8-master.initramfs``
+   ``https://tarballs.opendev.org/openstack/ironic-python-agent/dib/files/ipa-centos9-master.initramfs``
    respectively.
 #. Execute the installation playbook, and the set files will be automatically
    downloaded again. If the files are not removed prior to (re)installation,

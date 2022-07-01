@@ -102,10 +102,21 @@
 - name: "Create an ironic service group"
   group:
     name: "ironic"
+
 - name: "Create an ironic service user"
   user:
     name: "ironic"
     group: "ironic"
+
+- name: "Add nginx and dnsmasq to the ironic group"
+  user:
+    name: "{{ item }}"
+    groups: "ironic"
+    append: yes
+  loop:
+    - "{{ nginx_user }}"
+    - dnsmasq
+
 - name: "Ensure /etc/ironic exists"
   file:
     name: "/etc/ironic"
@@ -113,6 +124,7 @@
     owner: "ironic"
     group: "ironic"
     mode: 0755
+
 # Note(TheJulia): The rootwrap copies will need to be re-tooled
 # to possibly directly retreive current files if a source install
 # is not utilized.
@@ -148,6 +160,9 @@
     crypt_scheme: bcrypt
     name: "{{ admin_username }}"
     password: "{{ admin_password }}"
+    owner: ironic
+    group: ironic
+    mode: 0600
   when:
     - not enable_keystone | bool
 
@@ -157,6 +172,9 @@
     crypt_scheme: bcrypt
     name: "{{ default_username }}"
     password: "{{ default_password }}"
+    owner: ironic
+    group: ironic
+    mode: 0600
   when:
     - not noauth_mode | bool
     - not enable_keystone | bool
@@ -207,6 +225,14 @@
     - "{{ ironic_agent_deploy_logs_local_path | default('') }}"
   when: item | length > 0
 
+- name: "Ensure /run/ironic exists"
+  file:
+    name: "/run/ironic"
+    state: directory
+    owner: "ironic"
+    group: "{{ nginx_user }}"
+    mode: 0750
+
 - name: "Create ironic DB Schema"
   command: ironic-dbsync --config-file /etc/ironic/ironic.conf create_schema
   environment: "{{ bifrost_venv_env }}"
@@ -230,26 +256,21 @@
   include: inspector_bootstrap.yml
   when: enable_inspector | bool
 
-- name: "Get ironic-api & ironic-conductor install location"
-  shell: echo $(dirname $(which ironic-api))
+- name: "Get ironic install location"
+  shell: echo $(dirname $(which ironic))
   register: ironic_install_prefix
   environment: "{{ bifrost_venv_env }}"
 
-- name: "Place ironic services"
+- name: "Place ironic service"
   template:
     src: systemd_template.j2
-    dest: "{{ init_dest_dir }}{{ item.service_name }}.service"
+    dest: "{{ init_dest_dir }}ironic.service"
     owner: "root"
     group: "root"
-  loop:
-    - service_path: "{{ ironic_install_prefix.stdout | default('') }}"
-      service_name: 'ironic-api'
-      username: 'ironic'
-      args: '--config-file /etc/ironic/ironic.conf'
-    - service_path: "{{ ironic_install_prefix.stdout | default('') }}"
-      service_name: 'ironic-conductor'
-      username: 'ironic'
-      args: '--config-file /etc/ironic/ironic.conf'
+  vars:
+    service_path: "{{ ironic_install_prefix.stdout | default('') }}"
+    service_name: 'ironic'
+    config_file: '/etc/ironic/ironic.conf'
 
 - name: "Create and populate /tftpboot"
   import_tasks: create_tftpboot.yml
@@ -261,8 +282,8 @@
   file:
     path: "{{ dnsmasq_additional_hostsdir }}"
     state: directory
-    owner: "root"
-    group: "root"
+    owner: "dnsmasq"
+    group: "ironic"
     mode: 0755
   when: dnsmasq_additional_hostsdir is defined
 
@@ -270,8 +291,8 @@
   file:
     path: "{{ dnsmasq_dhcp_hostsdir }}"
     state: directory
-    owner: "root"
-    group: "root"
+    owner: "dnsmasq"
+    group: "ironic"
     mode: 0755
 
 - name: "Retrieve interface IP informations"
@@ -378,7 +399,7 @@
     name: bifrost-nginx-install
     tasks_from: bootstrap
 
-- name: "Place nginx configuration for ironic"
+- name: "Place nginx configuration for HTTP directory"
   template:
     src: nginx_conf.d_bifrost-httpboot.conf.j2
     dest: /etc/nginx/conf.d/bifrost-httpboot.conf
@@ -386,13 +407,22 @@
     group: "{{ nginx_user }}"
     mode: 0755
 
+- name: "Place nginx configuration for TLS"
+  template:
+    src: nginx_conf.d_bifrost-ironic.conf.j2
+    dest: /etc/nginx/conf.d/bifrost-ironic.conf
+    owner: "{{ nginx_user }}"
+    group: "{{ nginx_user }}"
+    mode: 0755
+  when: enable_tls | bool
+
 - name: "Set permissions for /var/lib/ironic for the ironic user"
   file:
     path: "{{ item }}"
     state: directory
     mode: 0750
     owner: "ironic"
-    group: "{{ nginx_user }}"
+    group: "ironic"
   loop:
     - "/var/lib/ironic"
     - "/var/lib/ironic/master_images"
@@ -409,11 +439,22 @@
     in_interface: "{{ network_interface }}"
     jump: ACCEPT
   loop:
-    - 68
-    - 69
     - "{{ file_url_port }}"
     - "{{ file_url_port_tls }}"
     - 6385
+  when: not use_firewalld | bool
+
+- name: "Explicitly permit DHCP and TFTP ports"
+  iptables:
+    chain: INPUT
+    action: insert
+    protocol: udp
+    destination_port: "{{ item }}"
+    in_interface: "{{ network_interface }}"
+    jump: ACCEPT
+  loop:
+    - 67
+    - 69
   when: not use_firewalld | bool
 
 - name: "Enable services in firewalld"
@@ -449,6 +490,12 @@
         proto: tcp
         setype: http_port_t
         state: present
+
+    - name: "Allow nginx to connect to downstream servers"
+      seboolean:
+        name: httpd_can_network_connect
+        state: yes
+        persistent: yes
 
     - name: "Add proper context on created data for tftpboot"
       sefcontext:

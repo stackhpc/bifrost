@@ -1,4 +1,3 @@
-epel-release        [platform:centos platform:rhel]
 gcc
 git
 libffi-devel        [platform:redhat platform:suse]
@@ -8,7 +7,8 @@ libselinux-utils    [platform:redhat]
 openssl-devel       [platform:redhat]
 libssl-dev          [platform:dpkg]
 lsb-release         [platform:suse platform:dpkg]
-redhat-lsb          [platform:redhat]
+# NOTE(rpittau): lsb-release is not maintained anymore for centos 9 stream
+redhat-lsb          [platform:fedora platform:centos-8 platform:rhel-8]
 make
 python3              [platform:rpm]
 python3-apt          [platform:dpkg]

@@ -46,7 +46,7 @@ dnsmasq, which will cause it to reread its configuration::
     killall -HUP dnsmasq
 
 Using Bifrost with your own DHCP server
-=======================================
+---------------------------------------
 
 The possibility exists that a user may already have a Dynamic Host
 Configuration Protocol (DHCP) server on their network.
@@ -60,13 +60,14 @@ conceivably the nodes can be segregated.
 
 What is required:
 
-  - DHCP server on the network segment
-  - Appropriate permissions to change DHCP settings
-  - Network access to the API and conductor. Keep in mind the iPXE image does
-    not support ICMP redirects.
+- DHCP server on the network segment
+- Appropriate permissions to change DHCP settings
+- Network access to the API and conductor. Keep in mind the iPXE image does
+  not support ICMP redirects.
 
 Example DHCP server configurations
-----------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 In the examples below port 8080 is used. However, the port number may vary
 depending on the environment configuration.
 
@@ -87,7 +88,7 @@ Internet Systems Consortium DHCPd::
 
 
 Architecture
-------------
+~~~~~~~~~~~~
 
 It should be emphasized that Ironic in standalone mode is intended to be used
 only in a trusted environment.
