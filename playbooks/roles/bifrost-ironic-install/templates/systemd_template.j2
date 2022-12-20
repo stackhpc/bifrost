@@ -4,6 +4,9 @@ Description={{ item.service_name }} service
 [Service]
 ExecStart={{ item.service_path }}/{{ item.service_name }} {{ item.args }}
 User={{ item.username }}
+RuntimeDirectory={{ item.username }}
+RuntimeDirectoryMode=750
+RuntimeDirectoryPreserve=yes
 
 [Install]
 WantedBy=multi-user.target
