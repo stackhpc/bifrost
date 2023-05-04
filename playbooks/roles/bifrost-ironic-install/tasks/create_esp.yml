@@ -11,16 +11,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
+- name: "Set grub2 and shim paths for Debian and Red Hat systems"
+  set_fact:
+    grub_efi_source: /usr/lib/ironic/grub-efi
+    shim_efi_source: /usr/lib/ironic/shim-efi
+
 - name: "Create a temporary directory for mounting ESP"
   tempfile:
     state: directory
   register: esp_temp_dir
 
 - name: "Create an empty ESP image"
-  command: dd if=/dev/zero of={{ esp_image }} bs=4096 count=1024
+  command: dd if=/dev/zero of={{ esp_image }} bs=8192 count=1024
 
 - name: "Initialize ESP filesystem"
-  command: mkfs.fat -s 4 -r 512 -S 4096 {{ esp_image }}
+  command: mkfs.fat -s 4 -r 1024 -S 4096 {{ esp_image }}
 
 - name: "Mount ESP filesystem"
   command: mount {{ esp_image }} {{ esp_temp_dir.path }}  # noqa 303
@@ -33,13 +38,13 @@
 
     - name: "Copy the shim image to ESP"
       copy:
-        src: "{{ shim_efi_binary }}"
+        src: "{{ shim_efi_source }}"
         remote_src: true
         dest: "{{ esp_temp_dir.path }}/EFI/BOOT/BOOTX64.efi"
 
     - name: "Copy the grub2 image to ESP"
       copy:
-        src: "{{ grub_efi_binary }}"
+        src: "{{ grub_efi_source }}"
         remote_src: true
         dest: "{{ esp_temp_dir.path }}/EFI/BOOT/GRUBX64.efi"
 

@@ -18,29 +18,54 @@
   when: ansible_os_family == 'Debian'
 
 - block:
-  - name: "Enable powertools repository for CentOS Stream 8"
+  - name: "Enable powertools repository for EL8"
     command: dnf config-manager --set-enabled powertools
-  - name: "Enable EPEL repository for CentOS Stream 8"
-    command: dnf install -y epel-release
-    when:
-    - enable_epel | bool
-    - dib_os_element == "debian"
-  when:
-  - ansible_distribution == "CentOS"
-  - ansible_distribution_version|int == 8
+    when: ansible_distribution_version|int == 8
 
-- name: "Enable EPEL repository for CentOS Stream 9"
+  - name: "Enable crb repository for EL9"
+    command: dnf config-manager --set-enabled crb
+    when: ansible_distribution_version|int == 9
+
+  - name: "Enable EPEL repository for EL7/8"
+    ansible.builtin.dnf:
+      name: epel-release
+      state: latest
+    when:
+      - enable_epel | bool
+      - ansible_distribution in ["AlmaLinux", "CentOS", "Rocky"]
+
+  - name: "Enable EPEL repositories for EL9"
+    ansible.builtin.dnf:
+      name:
+        - epel-next-release
+      state: latest
+    when:
+      - enable_epel | bool
+      - ansible_distribution == 'CentOS'
+      - ansible_distribution_version|int == 9
+
+- name: "Enable EPEL repository for RedHat 9"
   command: dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+  args:
+    creates: /etc/yum.repos.d/epel.repo
   when:
   - enable_epel | bool
-  - dib_os_element == "debian"
-  - ansible_distribution == "CentOS"
+  - ansible_distribution == "RedHat"
   - ansible_distribution_version|int >= 9
 
-- name: "Install packages"
+- name: "Install system packages"
   package:
     name: "{{ required_packages }}"
     state: present
+
+- name: "Install python packages (in venv)"
+  include_role:
+    name: bifrost-pip-install
+  vars:
+    package: "{{ item }}"
+  with_items:
+    - passlib
+    - pymysql
 
 - name: "Install Nginx"
   import_role:
@@ -79,16 +104,6 @@
     state: present
   when:
    - install_dib | bool
-   - ansible_distribution != "CentOS"
-
-- name: Ensure required packages are installed
-  dnf:
-    name: "{{ dib_host_required_packages | select | list }}"
-    enablerepo: epel
-    state: present
-  when:
-   - install_dib | bool
-   - ansible_distribution == "CentOS"
 
 - name: "sushy - Install"
   include_role:
@@ -117,12 +132,6 @@
   vars:
     package: metalsmith
     source_install: false
-
-- name: "Install pymysql"
-  include_role:
-    name: bifrost-pip-install
-  vars:
-    package: pymysql
 
 - name: "Install extra packages for ironic"
   include_role:
@@ -158,3 +167,44 @@
 - name: "Install Ironic Prometheus Exporter"
   include_tasks: prometheus_exporter_install.yml
   when: enable_prometheus_exporter | bool
+
+- name: "Create a temporary directory for unpacking grub2 and shim"
+  tempfile:
+    state: directory
+  register: efi_unpack_dir
+
+- block:
+  - name: "Create a binary cache directory"
+    file:
+      path: /usr/lib/ironic
+      state: directory
+      owner: root
+      group: root
+      mode: 0755
+
+  - name: "Download grub2 and shim binaries"
+    import_role:
+      name: bifrost-download-packages
+    vars:
+      download_packages:
+        - "{{ grub_efi_package }}"
+        - "{{ shim_efi_package }}"
+      download_dest: "{{ efi_unpack_dir.path }}"
+
+  - name: "Copy grub2 and shim into cache"
+    copy:
+      src: "{{ efi_unpack_dir.path }}/{{ item.src }}"
+      remote_src: true
+      dest: "/usr/lib/ironic/{{ item.dest }}"
+    loop:
+      - src: "{{ grub_efi_package }}/{{ grub_efi_binary }}"
+        dest: grub-efi
+      - src: "{{ shim_efi_package }}/{{ shim_efi_binary }}"
+        dest: shim-efi
+
+  when: ansible_os_family != 'Suse'
+  always:
+    - name: "Delete the temporary directory"
+      file:
+        path: "{{ efi_unpack_dir.path }}"
+        state: absent

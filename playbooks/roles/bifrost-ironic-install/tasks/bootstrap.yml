@@ -77,6 +77,19 @@
     mysql_socket_path: "/var/run/mysql/mysql.sock"
   when: (ansible_os_family | lower) not in ['redhat', 'debian']
 
+# NOTE(mgoddard): This should be done after starting the database, but before
+# using it.
+- name: "MySQL - Upgrade"
+  command:
+    cmd: >-
+      mysql_upgrade
+      {% if mysql_socket_path %}--socket={{ mysql_socket_path }}{% endif %}
+      {% if mysql_username is defined %}--user={{ mysql_username }}{% endif %}
+      {% if mysql_password is defined %}--password={{ mysql_password }}{% endif %}
+  register: mysql_upgrade_result
+  changed_when: "'is already upgraded' not in mysql_upgrade_result.stdout"
+  when: ironic.database.host == 'localhost'
+
 - name: "MySQL - Creating DB"
   mysql_db:
     login_unix_socket: "{{ mysql_socket_path | default(omit) }}"
@@ -154,29 +167,26 @@
     group: root
   when: not skip_install | bool
 
-- name: "Generate admin htpasswd for ironic"
+- name: "Generate htpasswd(s) for ironic"
   htpasswd:
     path: /etc/ironic/htpasswd
     crypt_scheme: bcrypt
-    name: "{{ admin_username }}"
-    password: "{{ admin_password }}"
+    name: "{{ item.name }}"
+    password: "{{ item.password }}"
     owner: ironic
     group: ironic
     mode: 0600
+  loop:
+    - name: "{{ admin_username }}"
+      password: "{{ admin_password }}"
+      noauth_mode: false # Authenticate JSON RPC even in no-auth mode
+    - name: "{{ default_username }}"
+      password: "{{ default_password }}"
+      noauth_mode: "{{ noauth_mode }}"
+  loop_control:
+    label: "{{ item.name }}"
   when:
-    - not enable_keystone | bool
-
-- name: "Generate user htpasswd for ironic"
-  htpasswd:
-    path: /etc/ironic/htpasswd
-    crypt_scheme: bcrypt
-    name: "{{ default_username }}"
-    password: "{{ default_password }}"
-    owner: ironic
-    group: ironic
-    mode: 0600
-  when:
-    - not noauth_mode | bool
+    - not item.noauth_mode | bool
     - not enable_keystone | bool
 
 - name: "Generate TLS parameters"
@@ -198,11 +208,11 @@
   when: vmedia_enable_tls | bool
 
 - name: "Populate keystone for Bifrost"
-  include: keystone_setup.yml
+  include_tasks: keystone_setup.yml
   when: enable_keystone | bool
 
 - name: "Read SSH key if needed"
-  import_tasks: ssh_public_key_path.yaml
+  include_tasks: ssh_public_key_path.yaml
   when: ipa_add_ssh_key | bool
 
 # NOTE(pas-ha) needed to e.g. pick up new interfaces after libvirt install
@@ -211,7 +221,7 @@
     gather_timeout: "{{ fact_gather_timeout }}"
 
 - name: "Generate ironic Configuration"
-  include: ironic_config.yml
+  import_tasks: ironic_config.yml
 
 - name: "Create the log directories (if requested)"
   file:
@@ -253,7 +263,7 @@
     mode: 0755
 
 - name: "Install ironic-inspector to permit use of inspection interface"
-  include: inspector_bootstrap.yml
+  include_tasks: inspector_bootstrap.yml
   when: enable_inspector | bool
 
 - name: "Get ironic install location"
@@ -287,26 +297,34 @@
     mode: 0755
   when: dnsmasq_additional_hostsdir is defined
 
-- name: "Setup inventory DHCP hosts directory"
+- name: "Setup inventory DHCP and ironic managed hosts directory"
   file:
     path: "{{ dnsmasq_dhcp_hostsdir }}"
     state: directory
     owner: "dnsmasq"
     group: "ironic"
-    mode: 0755
+    mode: 0775
+
+- name: "Setup ironic managed DHCP options directory"
+  file:
+    path: "{{ dnsmasq_dhcp_optsdir }}"
+    state: directory
+    owner: "dnsmasq"
+    group: "ironic"
+    mode: 0775
 
 - name: "Retrieve interface IP informations"
   set_fact:
     itf_infos: "{{ internal_interface }}"
     dhcp_netaddr: "{{ dhcp_pool_start }}/{{ dhcp_static_mask }}"
-  when: include_dhcp_server | bool
+  when: enable_dhcp | bool
 - name: "Compute interface and DHCP network informations"
   set_fact:
     itf_netaddr1: "{{ itf_infos['address'] }}/{{ itf_infos['netmask'] }}"
     itf_netaddr2: "{{ itf_infos['network'] }}/{{ itf_infos['netmask'] }}"
     itf_broadcast: "{{ itf_infos['broadcast'] }}/{{ itf_infos['netmask'] }}"
     dhcp_netaddr: "{{ dhcp_netaddr | ipaddr('network') }}/{{ dhcp_static_mask }}"
-  when: include_dhcp_server | bool
+  when: enable_dhcp | bool
 - name: "Validate interface network addresses"
   fail:
     msg: >
@@ -314,7 +332,7 @@
       {{ itf_netaddr1 | ipaddr('network') }}/{{ itf_netaddr1 | ipaddr('prefix') }}
       vs {{ itf_netaddr2 }}/{{ itf_netaddr2 | ipaddr('prefix') }}
   when:
-    - include_dhcp_server | bool
+    - enable_dhcp | bool
     - itf_netaddr1 | ipaddr('network') != itf_netaddr2 | ipaddr('network')
 - name: "Validate interface broadcast addresses"
   fail:
@@ -323,7 +341,7 @@
       {{ itf_netaddr1 | ipaddr('broadcast') }}/{{ itf_netaddr1 | ipaddr('prefix') }}
       vs {{ itf_broadcast | ipaddr('broadcast') }}/{{ itf_broadcast | ipaddr('prefix') }}
   when:
-    - include_dhcp_server | bool
+    - enable_dhcp | bool
     - itf_netaddr1 | ipaddr('broadcast') != itf_broadcast | ipaddr('broadcast')
 - name: "Validate DHCP and interface addresses"
   debug:
@@ -333,7 +351,7 @@
       {{ dhcp_netaddr | ipaddr('network') }}/{{ dhcp_netaddr | ipaddr('prefix') }}
       overriding DHCP with interface settings"
   when:
-    - include_dhcp_server | bool
+    - enable_dhcp | bool
     - itf_netaddr2 | ipaddr('network') != dhcp_netaddr | ipaddr('network')
 - name: "Computing new DHCP informations"
   set_fact:
@@ -341,7 +359,7 @@
     dhcp_end_ip: "{{ dhcp_pool_end.split('.')[-1] }}"
     dhcp_netaddr: "{{ itf_netaddr1 | ipaddr('network') }}"
   when:
-    - include_dhcp_server | bool
+    - enable_dhcp | bool
     - itf_netaddr2 | ipaddr('network') != dhcp_netaddr | ipaddr('network')
 # Note(olivierbourdon38): we could do much more complex network
 # computation to derive exact (or way closer to exact) range for
@@ -351,25 +369,25 @@
      dhcp_pool_start: "{{ '.'.join(dhcp_netaddr.split('.')[0:-1]) }}.{{ dhcp_start_ip }}"
      dhcp_pool_end: "{{ '.'.join(dhcp_netaddr.split('.')[0:-1]) }}.{{ dhcp_end_ip }}"
   when:
-    - include_dhcp_server | bool
+    - enable_dhcp | bool
     - itf_netaddr2 | ipaddr('network') != dhcp_netaddr | ipaddr('network')
 - name: "Deploy dnsmasq configuration file"
   template: src=dnsmasq.conf.j2 dest=/etc/dnsmasq.conf
-  when: include_dhcp_server | bool
+  when: enable_dhcp | bool
 # NOTE(Shrews) When testing, we want to use our custom dnsmasq.conf file,
 # not the one supplied by libvirt.
 - name: "Look for libvirt dnsmasq config"
   stat: path=/etc/dnsmasq.d/libvirt-bin
   register: test_libvirt_dnsmasq
-  when: include_dhcp_server | bool
+  when: enable_dhcp | bool
 - name: "Disable libvirt dnsmasq config"
   command: mv /etc/dnsmasq.d/libvirt-bin /etc/dnsmasq.d/libvirt-bin~
   when:
-    - include_dhcp_server | bool
+    - enable_dhcp | bool
     - test_libvirt_dnsmasq.stat.exists
     - testing | bool
 - name: "Download Ironic Python Agent kernel & image"
-  include: download_ipa_image.yml
+  include_tasks: download_ipa_image.yml
   when:
     - not create_ipa_image | bool
     - download_ipa | bool
@@ -382,6 +400,18 @@
         owner: ironic
         group: ironic
         mode: 0644
+  rescue:
+    - name: "Attempt to use curl if get_url fails"
+      command: "curl -L --output {{ deploy_image }} {{ cirros_deploy_image_upstream_url }}" # noqa: command-instead-of-module
+    - name: Set file permissions
+      file:
+        path: "{{ deploy_image }}"
+        owner: ironic
+        group: ironic
+        mode: 0644
+  when: use_cirros | bool
+
+- block:
     - name: "Create a checksum file for cirros"
       shell: md5sum {{ deploy_image_filename }} > {{ deploy_image_filename }}.CHECKSUMS
       args:
@@ -505,6 +535,7 @@
       loop:
         - "{{ tftp_boot_folder }}"
         - "{{ tftp_boot_folder }}/pxelinux.cfg"
+        - "{{ ironic_tftp_master_path }}"
 
     - name: "Add proper context on created data for http_boot"
       sefcontext:
@@ -521,8 +552,9 @@
       loop:
         - "{{ http_boot_folder }}"
         - "{{ tftp_boot_folder }}"
+        - "{{ ironic_tftp_master_path }}"
   when: (ansible_os_family == 'RedHat' or ansible_os_family == 'Suse') and
-         ansible_selinux.status == 'enabled' and ansible_selinux.mode == "enforcing"
+         ansible_selinux.status == 'enabled'
 - name: "Configure remote logging"
   template: src=10-rsyslog-remote.conf.j2 dest=/etc/rsyslog.d/10-rsyslog-remote.conf
   when:

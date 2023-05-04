@@ -19,25 +19,30 @@
 # ironic knows, that we do not know potentially, such as an UUID
 # should a node have been created without one.
 - name: "Collecting node facts"
-  os_ironic_node_info:
+  openstack.cloud.baremetal_node_info:
     cloud: "{{ cloud_name | default(omit) }}"
     auth_type: "{{ auth_type | default(omit) }}"
     auth: "{{ auth | default(omit) }}"
     ca_cert: "{{ tls_certificate_path | default(omit) }}"
-    ironic_url: "{{ ironic_url | default(omit) }}"
-    uuid: "{{ uuid | default() }}"
-    name: "{{ name | default() }}"
-    skip_items:
-      - instance_info
+    node: "{{ uuid | default(name) }}"
   register: node_info
+
+- name: "Collecting node ports"
+  openstack.cloud.baremetal_port_info:
+    cloud: "{{ cloud_name | default(omit) }}"
+    auth_type: "{{ auth_type | default(omit) }}"
+    auth: "{{ auth | default(omit) }}"
+    ca_cert: "{{ tls_certificate_path | default(omit) }}"
+    node: "{{ node_info.baremetal_nodes[0].id | default(node_info.baremetal_nodes[0].uuid) }}"
+  register: port_info
 
 - name: "Set UUID from Ironic"
   set_fact:
-    uuid: "{{ node_info.node.uuid }}"
+    uuid: "{{ node_info.baremetal_nodes[0].id | default(node_info.baremetal_nodes[0].uuid) }}"
   when: uuid is undefined
 
 - name: "Identify ssh_public_key from ssh_public_key_path"
-  include: ssh_public_key_path.yaml
+  include_tasks: ssh_public_key_path.yaml
   when: ssh_public_key is undefined
 
 - name: "Make temporary folder to build configdrive"
@@ -66,7 +71,7 @@
     ipv4_subnet_mask: "{{ ipv4_subnet_mask | default('') }}"
     vlan_id: "{{ vlan_id | default(omit) }}"
     network_mtu: "{{ network_mtu | default(omit) }}"
-    nics: "{{ node_info.node.nics | default(omit) }}"
+    nics: "{{ port_info.baremetal_ports }}"
     node_network_data: "{{ node_network_data | default(omit) }}"
   when: addressing_mode is undefined or "dhcp" not in addressing_mode
 
@@ -77,6 +82,16 @@
   loop: "{{ metadata_versions }}"
   when:
     - addressing_mode is undefined or "dhcp" not in addressing_mode
+
+- name: "Generate user_data"
+  template:
+    src: raw_user_data.j2
+    dest: "{{ variable_configdrive_location.path }}/{{ uuid }}/openstack/{{ item }}/user_data"
+  loop: "{{ metadata_versions }}"
+  when:
+    - user_data_content is defined
+    - user_data_content | length > 0
+
 
 - name: "Make metadata folder - /openstack/content"
   file:
@@ -111,7 +126,7 @@
   command: "{{ iso_gen_utility }} -R -V config-2 -o {{ http_boot_folder }}/configdrive-{{ uuid }}.iso {{ variable_configdrive_location.path }}/{{ uuid }}"
 
 - name: "Make config drive files base64 encoded and gzip compressed"
-  become:  yes
+  become: yes
   shell: |
     set -o pipefail
     gzip -c {{ http_boot_folder }}/configdrive-{{ uuid }}.iso | base64 > {{ http_boot_folder }}/configdrive-{{ uuid }}.iso.gz
@@ -134,3 +149,9 @@
 - name: "Set the configdrive URL"
   set_fact:
     deploy_config_drive: "{{ deploy_url_protocol }}://{{ internal_ip }}:{{ file_url_port }}/configdrive-{{ uuid }}.iso.gz"
+
+- name: "Apply the correct SELinux context to the configdrive iso"
+  become: yes
+  command: restorecon -iRv {{ http_boot_folder }}
+  when: (ansible_os_family == 'RedHat' or ansible_os_family == 'Suse') and
+         ansible_selinux.status == 'enabled'

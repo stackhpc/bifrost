@@ -70,13 +70,12 @@ ipa_file_protocol: "http"
 ipa_upstream_release: "master"
 use_tinyipa: false
 
-enable_uefi_ipxe: true
 ipxe_efi_binary: ipxe.efi
 
 tarballs_base_url: "https://tarballs.opendev.org/openstack/ironic-python-agent"
 ipa_download_headers: {}
-ipa_kernel: "{{http_boot_folder}}/ipa.kernel"
-ipa_ramdisk: "{{http_boot_folder}}/ipa.initramfs"
+ipa_kernel: "{{ http_boot_folder }}/ipa.kernel"
+ipa_ramdisk: "{{ http_boot_folder }}/ipa.initramfs"
 ipa_kernel_url: "{{ ipa_file_protocol }}://{{ internal_ip }}:{{ file_url_port }}/ipa.kernel"
 ipa_download_distro: >-
   {%- if ipa_upstream_release == "stable-train" -%}
@@ -88,23 +87,23 @@ ipa_download_distro: >-
   {%- endif -%}
 ipa_kernel_upstream_url: >-
   {%- if use_tinyipa | bool -%}
-  {{tarballs_base_url}}/tinyipa/files/tinyipa-{{ ipa_upstream_release }}.vmlinuz
+  {{ tarballs_base_url }}/tinyipa/files/tinyipa-{{ ipa_upstream_release }}.vmlinuz
   {%- else -%}
-  {{tarballs_base_url}}/dib/files/ipa-{{ ipa_download_distro }}-{{ ipa_upstream_release }}.kernel
+  {{ tarballs_base_url }}/dib/files/ipa-{{ ipa_download_distro }}-{{ ipa_upstream_release }}.kernel
   {%- endif -%}
 ipa_kernel_upstream_checksum_algo: "sha256"
 ipa_kernel_upstream_checksum_url: "{{ ipa_kernel_upstream_url }}.{{ ipa_kernel_upstream_checksum_algo }}"
 ipa_ramdisk_url: "{{ ipa_file_protocol }}://{{ internal_ip }}:{{ file_url_port }}/ipa.initramfs"
 ipa_ramdisk_upstream_url: >-
   {%- if use_tinyipa | bool -%}
-  {{tarballs_base_url}}/tinyipa/files/tinyipa-{{ ipa_upstream_release }}.gz
+  {{ tarballs_base_url }}/tinyipa/files/tinyipa-{{ ipa_upstream_release }}.gz
   {%- else -%}
-  {{tarballs_base_url}}/dib/files/ipa-{{ ipa_download_distro }}-{{ ipa_upstream_release }}.initramfs
+  {{ tarballs_base_url }}/dib/files/ipa-{{ ipa_download_distro }}-{{ ipa_upstream_release }}.initramfs
   {%- endif -%}
 ipa_ramdisk_upstream_checksum_algo: "sha256"
 ipa_ramdisk_upstream_checksum_url: "{{ ipa_ramdisk_upstream_url }}.{{ ipa_ramdisk_upstream_checksum_algo }}"
 deploy_image_filename: "deployment_image.qcow2"
-deploy_image: "{{http_boot_folder}}/{{deploy_image_filename}}"
+deploy_image: "{{ http_boot_folder }}/{{ deploy_image_filename }}"
 esp_image: "{{ http_boot_folder }}/esp.img"
 esp_image_url: "{{ ipa_file_protocol }}://{{ internal_ip }}:{{ file_url_port }}/esp.img"
 # Use cirros instead of building an image via diskimage-builder
@@ -117,9 +116,9 @@ update_ipa: "{{ update_repos }}"
 ipa_add_ssh_key: false
 cirros_deploy_image_upstream_url: https://download.cirros-cloud.net/0.5.1/cirros-0.5.1-x86_64-disk.img
 # By default bifrost will deploy dnsmasq to utilize as an integrated DHCP
-# server.  If you already have a DHCP server, you can pass --disable-dhcp
-# to the bifrost-cli install command to disable it.
-include_dhcp_server: true
+# server. If you already have a DHCP server or do not need DHCP/TFTP at all,
+# you can pass --disable-dhcp to the bifrost-cli install command to disable it.
+enable_dhcp: "{{ include_dhcp_server | default(true) }}"
 # *_git_url can be overridden by local clones for offline installs
 dib_git_url: https://opendev.org/openstack/diskimage-builder
 ironicclient_git_url: https://opendev.org/openstack/python-ironicclient
@@ -168,6 +167,7 @@ enable_credential_less_deploy: false
 # default: empty list
 ironic_extra_packages: []
 
+dhcp_provider: "dnsmasq"
 # DHCP pool for requests -- ignored if inventory_dhcp is set to True
 # since IP allocation will be static.
 dhcp_pool_start: 192.168.1.200
@@ -178,8 +178,12 @@ dhcp_static_mask: 255.255.255.0
 # Whether to enable DNS in dnsmasq. Will conflict with any other DNS server,
 # hence disabled by default.
 dnsmasq_enable_dns: "{{ not (dnsmasq_disable_dns | default(True) | bool) }}"
-# Directory with static DHCP hosts configuration.
+# Directory with static and ironic managed DHCP hosts configuration.
 dnsmasq_dhcp_hostsdir: "/etc/dnsmasq.d/bifrost.dhcp-hosts.d"
+# Directory with ironic managed DHCP options configuration.
+dnsmasq_dhcp_optsdir: "/etc/dnsmasq.d/bifrost.dhcp-opts.d"
+# File which represents dnsmasq leases, used when dhcp_provider == "dnsmasq"
+dnsmasq_leases_file: "/var/lib/dnsmasq/dnsmasq.leases"
 # Uncomment to set up directory with additional hosts for DNS. Useless without
 # dnsmasq_enable_dns set to True.
 #dnsmasq_additional_hostsdir: "/etc/dnsmasq.d/bifrost.hosts.d"
@@ -251,7 +255,7 @@ inspector_extra_kernel_options: "ipa-inspection-collectors=default,logs"
 
 enable_inspector_discovery: false
 
-inspector_default_node_driver: "{{ 'manual-management' if enable_credential_less_deploy|bool else 'ipmi' }}"
+inspector_default_node_driver: "{{ 'manual-management' if enable_credential_less_deploy | bool else 'ipmi' }}"
 
 # Inspector defaults (deprecated in Victoria)
 inspector:
@@ -262,7 +266,7 @@ inspector:
 # If baremetal nodes should be turned off after inspection.
 # The inspector default is to turn off the baremetal node
 # power, this setting to false enables use of fast track mode.
-power_off_after_inspection: "{{ not fast_track|bool }}"
+power_off_after_inspection: "{{ not fast_track | bool }}"
 
 # We may not have packaged iPXE files on some distros, or may want to
 # download them on their own.

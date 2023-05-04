@@ -78,7 +78,7 @@
         and xinetd_tftp_disable is changed
 
 - name: "Download ipxe files if asked"
-  include: get_ipxe.yml
+  include_tasks: get_ipxe.yml
   when: download_ipxe | bool
 
 - name: "Copy iPXE image into place"
@@ -100,7 +100,7 @@
     mode: 0644
     remote_src: true
 
-- name: "Copy full iPXE image into /tftpboot"
+- name: "Copy full iPXE image into {{ tftp_boot_folder }}"
   copy:
     src: "{{ ipxe_dir }}/{{ ipxe_full_binary }}"
     dest: "{{ tftp_boot_folder }}"
@@ -108,6 +108,35 @@
     group: ironic
     mode: 0644
     remote_src: true
+
+- name: "Set grub2 and shim paths for Debian and Red Hat systems"
+  set_fact:
+    grub_efi_source: /usr/lib/ironic/grub-efi
+    shim_efi_source: /usr/lib/ironic/shim-efi
+
+- name: "Copy shim into serving folders"
+  copy:
+    src: "{{ shim_efi_source }}"
+    dest: "{{ item }}/bootx64.efi"
+    owner: ironic
+    group: ironic
+    mode: 0644
+    remote_src: true
+  loop:
+    - "{{ tftp_boot_folder }}"
+    - "{{ http_boot_folder }}"
+
+- name: "Copy grub into serving folders"
+  copy:
+    src: "{{ grub_efi_source }}"
+    dest: "{{ item }}/grubx64.efi"
+    owner: ironic
+    group: ironic
+    mode: 0644
+    remote_src: true
+  loop:
+    - "{{ tftp_boot_folder }}"
+    - "{{ http_boot_folder }}"
 
 - name: "Set up iPXE for EFI booting"
   block:
@@ -145,7 +174,7 @@
         mode: 0644
         remote_src: true
 
-  when: enable_uefi_ipxe | bool
+  when: "'ipxe' in enabled_boot_interfaces.split(',')"
 
 # Similar logic to below can be utilized to retrieve files
 - name: "Determine if folder exists, else create and populate folder."

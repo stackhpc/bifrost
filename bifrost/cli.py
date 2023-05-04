@@ -50,9 +50,16 @@ def log(*message, only_if=True):
 
 def process_extra_vars(extra_vars):
     for item in extra_vars:
+
+        # argparse removes quotes, just add quotes for these vars
+        if 'extra_kernel_options=' in item:
+            key, value = item.split('=', 1)
+            item = key + '="' + value + '"'
+
         if item.startswith('@'):
             # Make sure relative paths still work
             item = '@' + os.path.abspath(item[1:])
+
         yield ('-e', item)
 
 
@@ -180,7 +187,7 @@ def cmd_install(args):
             developer_mode=args.develop,
             enable_prometheus_exporter=args.enable_prometheus_exporter,
             default_boot_mode=args.boot_mode or 'uefi',
-            include_dhcp_server=not args.disable_dhcp,
+            enable_dhcp=not args.disable_dhcp,
             extra_vars=args.extra_vars,
             params_output_file=args.output,
             **kwargs)

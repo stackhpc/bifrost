@@ -12,6 +12,7 @@ ENABLE_KEYSTONE="${ENABLE_KEYSTONE:-false}"
 ZUUL_BRANCH=${ZUUL_BRANCH:-}
 CLI_TEST=${CLI_TEST:-false}
 BOOT_MODE=${BOOT_MODE:-}
+ENABLE_GRUB_NETWORK_BOOT=${ENABLE_GRUB_NETWORK_BOOT:-false}
 ENABLE_TLS=${ENABLE_TLS:-false}
 ENABLE_PROMETHEUS_EXPORTER=${ENABLE_PROMETHEUS_EXPORTER:-false}
 USE_VMEDIA=${USE_VMEDIA:-false}
@@ -45,6 +46,7 @@ PROVISION_WAIT_TIMEOUT=${PROVISION_WAIT_TIMEOUT:-900}
 NOAUTH_MODE=${NOAUTH_MODE:-false}
 CLOUD_CONFIG=""
 WAIT_FOR_DEPLOY=true
+TEST_VM_NODE_DRIVER=${TEST_VM_NODE_DRIVER:-}
 
 # Get OS information
 source /etc/os-release || source /usr/lib/os-release
@@ -94,6 +96,7 @@ if [ ${USE_DHCP} = "true" ]; then
     INVENTORY_DHCP=true
     INVENTORY_DHCP_STATIC_IP=true
     WRITE_INTERFACES_FILE=false
+    CLOUD_CONFIG+=" -e dhcp_provider=none"
 elif [ ${BUILD_IMAGE} = "true" ]; then
     USE_CIRROS=false
     TESTING_USER=root
@@ -108,6 +111,8 @@ elif [ ${ENABLE_KEYSTONE} = "true" ]; then
     CLOUD_CONFIG+=" -e cloud_name=bifrost"
 fi
 
+REDEPLOY_NODES=$USE_CIRROS
+
 if [[ -n "$BOOT_MODE" ]]; then
     CLOUD_CONFIG+=" -e default_boot_mode=$BOOT_MODE"
     VM_SETUP_EXTRA+=" -e default_boot_mode=$BOOT_MODE"
@@ -116,8 +121,13 @@ fi
 if [ ${USE_VMEDIA} = "true" ]; then
     TEST_VM_NODE_DRIVER=redfish
     CLOUD_CONFIG+=" -e default_boot_interface=redfish-virtual-media"
-    # The default won't work for other hardware types
-    CLOUD_CONFIG+=" -e enabled_hardware_types=redfish"
+elif [ ${ENABLE_GRUB_NETWORK_BOOT} = "true" ]; then
+    CLOUD_CONFIG+=" -e default_boot_interface=pxe"
+fi
+
+if [[ -n "$TEST_VM_NODE_DRIVER" ]]; then
+    VM_SETUP_EXTRA+=" --driver $TEST_VM_NODE_DRIVER"
+    CLOUD_CONFIG+=" -e enabled_hardware_types=$TEST_VM_NODE_DRIVER"
 fi
 
 on_exit() {
@@ -147,7 +157,6 @@ done
     --memory ${VM_MEMORY_SIZE:-1024} \
     --disk ${VM_DISK:-5} \
     --inventory "${BAREMETAL_DATA_FILE}" \
-    --driver ${TEST_VM_NODE_DRIVER:-ipmi} \
     --extra-vars git_url_root="${WORKSPACE:-https://opendev.org}" \
     ${VM_SETUP_EXTRA:-} \
     ${BIFROST_CLI_EXTRA:-}
@@ -187,6 +196,7 @@ ${ANSIBLE} -vvvv \
     -e inventory_dhcp_static_ip=${INVENTORY_DHCP_STATIC_IP} \
     -e enable_inspector=${USE_INSPECTOR} \
     -e inspect_nodes=${INSPECT_NODES} \
+    -e redeploy_nodes=${REDEPLOY_NODES} \
     -e download_ipa=${DOWNLOAD_IPA} \
     -e create_ipa_image=${CREATE_IPA_IMAGE} \
     -e write_interfaces_file=${WRITE_INTERFACES_FILE} \
