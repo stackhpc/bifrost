@@ -393,36 +393,85 @@
     - download_ipa | bool
 
 - block:
-    - name: "Download a custom image to use for deployment if requested"
-      get_url:
-        url: "{{ custom_deploy_image_upstream_url }}"
-        dest: "{{ deploy_image }}"
-        owner: ironic
-        group: ironic
-        mode: 0644
-  rescue:
-    - name: "Attempt to use curl if get_url fails"
-      command: "curl -L --output {{ deploy_image }} {{ custom_deploy_image_upstream_url }}" # noqa: command-instead-of-module
-    - name: Set file permissions
-      file:
-        path: "{{ deploy_image }}"
-        owner: ironic
-        group: ironic
-        mode: 0644
-  when: download_custom_deploy_image | bool
+    - block:
+        - name: "Download a custom image to use for deployment if requested"
+          get_url:
+            url: "{{ custom_deploy_image_upstream_url }}"
+            dest: "{{ deploy_image }}"
+            owner: ironic
+            group: ironic
+            mode: 0644
+      rescue:
+        - name: "Attempt to use curl if get_url fails"
+          command: "curl -L --output {{ deploy_image }} {{ custom_deploy_image_upstream_url }}" # noqa: command-instead-of-module
+        - name: Set file permissions
+          file:
+            path: "{{ deploy_image }}"
+            owner: ironic
+            group: ironic
+            mode: 0644
+
+    - block:
+        - name: "Create a checksum file for the custom deployment image"
+          shell: md5sum {{ deploy_image_filename }} > {{ deploy_image_filename }}.CHECKSUMS
+          args:
+            chdir: "{{ http_boot_folder }}"
+        - name: "Ensure the checksum file is readable"
+          file:
+            path: "{{ http_boot_folder }}/{{ deploy_image_filename }}.CHECKSUMS"
+            owner: ironic
+            group: ironic
+            mode: 0644
+  when:
+    - download_custom_deploy_image | bool
+    - custom_deploy_image_distribution == "cirros"
 
 - block:
-    - name: "Create a checksum file for the custom deployment image"
-      shell: md5sum {{ deploy_image_filename }} > {{ deploy_image_filename }}.CHECKSUMS
-      args:
-        chdir: "{{ http_boot_folder }}"
-    - name: "Ensure the checksum file is readable"
-      file:
-        path: "{{ http_boot_folder }}/{{ deploy_image_filename }}.CHECKSUMS"
-        owner: ironic
-        group: ironic
-        mode: 0644
-  when: download_custom_deploy_image | bool
+    - block:
+        - name: "Download custom deployment image checksum"
+          get_url:
+            url: "{{ deploy_image_upstream_checksum_url | dirname }}/{{ SHA256SUMS if custom_deploy_image_distribution == 'ubuntu' else CHECKSUM }}"
+            dest: "{{ deploy_image }}.CHECKSUMS"
+            headers: "{{ ipa_download_headers | default(omit, true) }}"
+            timeout: 300
+            force: yes
+            owner: ironic
+            group: ironic
+            mode: 0644
+
+        - name: "Extract custom deployment image checksum"
+          command: >-
+            awk
+            {{ '/{{ custom_deploy_image_upstream_url | basename }}/{print $1}' if custom_deploy_image_distribution == "ubuntu" else '/\({{ custom_deploy_image_upstream_url | basename }}\)/{print $4}' }}
+            "{{ deploy_image }}.CHECKSUMS"
+          register: parsed_deploy_image_checksum
+          failed_when: parsed_deploy_image_checksum is failed
+                      or not parsed_deploy_image_checksum.stdout
+
+        - set_fact:
+            deploy_image_checksum: "sha256:{{ parsed_deploy_image_checksum.stdout }}"
+
+    - block:
+        - name: "Download a custom image to use for deployment if requested"
+          get_url:
+            url: "{{ custom_deploy_image_upstream_url }}"
+            dest: "{{ deploy_image }}"
+            owner: ironic
+            group: ironic
+            mode: 0644
+            checksum: "{{ deploy_image_checksum | default(omit) }}"
+      rescue:
+        - name: "Attempt to use curl if get_url fails"
+          command: "curl -L --output {{ deploy_image }} {{ custom_deploy_image_upstream_url }}" # noqa: command-instead-of-module
+        - name: Set file permissions
+          file:
+            path: "{{ deploy_image }}"
+            owner: ironic
+            group: ironic
+            mode: 0644
+  when:
+    - download_custom_deploy_image | bool
+    - custom_deploy_image_distribution != "cirros"
 
 - name: "Bootstrap Nginx"
   import_role:

@@ -114,7 +114,17 @@ update_repos: true
 update_ipa: "{{ update_repos }}"
 # Use the DIB dynamic-login element to insert the SSH key
 ipa_add_ssh_key: false
-custom_deploy_image_upstream_url: https://download.cirros-cloud.net/0.5.1/cirros-0.5.1-x86_64-disk.img
+custom_deploy_image_distribution: "cirros"
+custom_deploy_image_upstream_url: >-
+  {%- if custom_deploy_image_distribution == "centos" -%}
+  https://cloud.centos.org/centos/8-stream/x86_64/images/CentOS-Stream-GenericCloud-8-20230501.0.x86_64.qcow2
+  {%- elif custom_deploy_image_distribution == "rocky" -%}
+  https://dl.rockylinux.org/pub/rocky/8/images/x86_64/Rocky-8-GenericCloud.latest.x86_64.qcow2
+  {%- elif custom_deploy_image_distribution == "ubuntu" -%}
+  https://cloud-images.ubuntu.com/focal/current/focal-server-cloudimg-amd64.img
+  {%- else -%}
+  https://download.cirros-cloud.net/0.5.1/cirros-0.5.1-x86_64-disk.img
+  {%- endif -%}
 # By default bifrost will deploy dnsmasq to utilize as an integrated DHCP
 # server. If you already have a DHCP server or do not need DHCP/TFTP at all,
 # you can pass --disable-dhcp to the bifrost-cli install command to disable it.
