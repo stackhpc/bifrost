@@ -10,17 +10,12 @@
         - bifrost-integration-tinyipa-ubuntu-focal
         - bifrost-integration-tinyipa-keystone-ubuntu-focal
         - bifrost-integration-redfish-vmedia-uefi-ubuntu-focal
-        - bifrost-upgrade-ubuntu-focal
         # Non-voting jobs
         - bifrost-integration-tinyipa-ubuntu-bionic:
             voting: false
         - bifrost-integration-tinyipa-opensuse-15:
             voting: false
-        - bifrost-integration-tinyipa-fedora-latest:
-            voting: false
         - bifrost-integration-tinyipa-debian-buster:
-            voting: false
-        - bifrost-integration-redfish-uefi-fedora-latest:
             voting: false
         - bifrost-integration-dhcp-ubuntu-focal:
             voting: false
@@ -51,4 +46,3 @@
         - bifrost-tox-linters
         - bifrost-integration-tinyipa-ubuntu-focal
         - bifrost-integration-tinyipa-keystone-ubuntu-focal
-        - bifrost-upgrade-ubuntu-focal
