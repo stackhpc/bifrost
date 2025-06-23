@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    Fixes an issue checksum vaidation would fail when a deployment image is
+    downloaded, even if the checksum matched. See `LP#2115188
+    <https://bugs.launchpad.net/bifrost/+bug/2115188>`__ for more details.
