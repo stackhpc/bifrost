@@ -73,4 +73,4 @@
           The deployment image checksum does not match the file that has been downloaded.
           Ensure that deploy_image_upstream_url, deploy_image_checksum_url, and deploy_image_checksum_algorithm are set correctly.
           To ignore the checksum, set deploy_image_checksum_algorithm to none.
-      when: deploy_image_checksum_algorithm != 'none' and downloaded_image_stat.stat.checksum != parsed_deployment_image_checksum
+      when: deploy_image_checksum_algorithm != 'none' and downloaded_image_stat.stat.checksum not in deployment_image_checksum
