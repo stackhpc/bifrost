@@ -18,11 +18,6 @@ jobs:
     uses: stackhpc/.github/.github/workflows/upstream-sync.yml@main
     with:
       release_series: 2025.1
-  synchronise-master:
-    name: Synchronise master
-    uses: stackhpc/.github/.github/workflows/upstream-sync.yml@main
-    with:
-      release_series: master
   synchronise-wallaby:
     name: Synchronise wallaby
     uses: stackhpc/.github/.github/workflows/upstream-sync.yml@main
