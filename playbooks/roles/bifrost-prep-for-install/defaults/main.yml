@@ -6,7 +6,7 @@ git_url_root: https://opendev.org
 dib_git_url: "{{ git_url_root }}/openstack/diskimage-builder"
 ironicclient_git_url: "{{ git_url_root }}/openstack/python-ironicclient"
 openstacksdk_git_url: "{{ git_url_root }}/openstack/openstacksdk"
-ironic_git_url: "{{ git_url_root }}/openstack/ironic"
+ironic_git_url: "https://github.com/stackhpc/ironic"
 ironicinspector_git_url: "{{ git_url_root }}/openstack/ironic-inspector"
 ironicinspectorclient_git_url: "{{ git_url_root }}/openstack/python-ironic-inspector-client"
 reqs_git_url: "{{ git_url_root }}/openstack/requirements"
@@ -33,7 +33,7 @@ prometheus_exporter_git_folder: "{{ git_root }}/ironic-prometheus-exporter"
 # *git_branch can be overridden for stable branch testing
 git_branch: master
 ironicclient_git_branch: "{{ git_branch }}"
-ironic_git_branch: "{{ git_branch }}"
+ironic_git_branch: "ifa/2025.1"
 openstacksdk_git_branch: "{{ git_branch }}"
 dib_git_branch: master
 ironicinspector_git_branch: "{{ git_branch }}"
